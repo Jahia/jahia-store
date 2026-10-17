@@ -31,6 +31,35 @@ public class ForgeMutation {
     }
 
     @GraphQLField
+    @GraphQLName("registerGitModule")
+    @GraphQLDescription("Register a git-backed module: the repository is read first, and one that fails the STORE.md contract is refused with the reason")
+    public GqlGitModule registerGitModule(
+            @GraphQLName("siteKey") @GraphQLNonNull final String siteKey,
+            @GraphQLName("gitUrl") @GraphQLNonNull @GraphQLDescription("The HTTP URL of the repository") final String gitUrl,
+            @GraphQLName("tagPattern") @GraphQLDescription("The pattern a tag must match to be a version; the store default when absent") final String tagPattern,
+            @GraphQLName("branch") @GraphQLDescription("The branch that holds the root STORE.md; the default branch when absent") final String branch) {
+        return GitModuleMutationExtension.register(siteKey, gitUrl, tagPattern, branch);
+    }
+
+    @GraphQLField
+    @GraphQLName("unregisterGitModule")
+    @GraphQLDescription("Remove the registration of a git-backed module. The repository is untouched.")
+    public Boolean unregisterGitModule(
+            @GraphQLName("siteKey") @GraphQLNonNull final String siteKey,
+            @GraphQLName("name") @GraphQLNonNull final String name) {
+        return GitModuleMutationExtension.unregister(siteKey, name);
+    }
+
+    @GraphQLField
+    @GraphQLName("refreshGitModule")
+    @GraphQLDescription("Make the next read of a git-backed module refresh it from its repository")
+    public Boolean refreshGitModule(
+            @GraphQLName("siteKey") @GraphQLNonNull final String siteKey,
+            @GraphQLName("name") @GraphQLNonNull final String name) {
+        return GitModuleMutationExtension.refresh(siteKey, name);
+    }
+
+    @GraphQLField
     @GraphQLName("setRootCategory")
     @GraphQLDescription("Set the JCR node configured as the site's root category")
     public Boolean setRootCategory(

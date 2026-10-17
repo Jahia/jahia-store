@@ -144,3 +144,10 @@
 [jnt:categorySettings] > jnt:content, mix:title, jmix:studioOnly, jmix:siteComponent
 
 [jnt:forgeUrl] > jnt:content, jmix:siteComponent, jmix:studioOnly
+
+// A git-backed module (docs/git-backed-modules.md): one mount point per repository, mounted
+// under the modules-repository of the store site as a read-only external provider.
+[jnt:gitStoreMountPoint] > jnt:mountPoint
+ - j:gitUrl (string) mandatory nofulltext
+ - j:tagPattern (string) nofulltext
+ - j:branch (string) nofulltext

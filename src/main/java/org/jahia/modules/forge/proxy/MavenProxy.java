@@ -25,6 +25,7 @@ package org.jahia.modules.forge.proxy;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import org.apache.commons.lang.StringUtils;
 import org.apache.jackrabbit.core.fs.FileSystem;
 import org.apache.xerces.impl.dv.util.Base64;
@@ -32,6 +33,7 @@ import org.jahia.data.templates.ModuleReleaseInfo;
 import org.jahia.modules.forge.actions.ActionSecurityUtils;
 import org.jahia.modules.forge.settings.ForgeSettings;
 import org.jahia.modules.forge.settings.ForgeSettingsService;
+import org.jahia.services.content.JCRNodeWrapper;
 import org.jahia.services.content.JCRSessionFactory;
 import org.jahia.services.content.JCRSessionWrapper;
 import org.jahia.services.sites.JahiaSitesService;
@@ -122,6 +124,14 @@ public class MavenProxy extends HttpServlet {
                 return;
             }
 
+            // A git-backed module declares the artefact URL of each version on its version node
+            // (docs/git-backed-modules.md), and the store holds no Maven repository for it.
+            final URI declared = declaredArtifact(session, siteName, path);
+            if (declared != null) {
+                streamArtifact(declared, null, declared.toString(), response);
+                return;
+            }
+
             ModuleReleaseInfo releaseInfo = getModuleReleaseInfo(siteName);
 
             String repositoryUrl = releaseInfo.getRepositoryUrl();
@@ -156,7 +166,9 @@ public class MavenProxy extends HttpServlet {
     private void streamArtifact(URI resolvedUri, ModuleReleaseInfo releaseInfo, String url, HttpServletResponse response) throws IOException {
         final CloseableHttpClient httpClient = httpClientService.getHttpClient(url);
         final HttpGet httpMethod = new HttpGet(resolvedUri);
-        httpMethod.addHeader("Authorization", "Basic " + Base64.encode((releaseInfo.getUsername() + ":" + releaseInfo.getPassword()).getBytes()));
+        if (releaseInfo != null) {
+            httpMethod.addHeader("Authorization", "Basic " + Base64.encode((releaseInfo.getUsername() + ":" + releaseInfo.getPassword()).getBytes()));
+        }
         try (final CloseableHttpResponse httpResponse = httpClient.execute(httpMethod)) {
             if (httpResponse.getCode() != HttpServletResponse.SC_OK) {
                 trySendError(response, httpResponse.getCode());
@@ -212,6 +224,46 @@ public class MavenProxy extends HttpServlet {
     private static boolean callerCanAccessRepository(final JCRSessionWrapper session, final String siteName)
             throws RepositoryException {
         return session.nodeExists(SITES_PATH + siteName + MODULES_REPOSITORY);
+    }
+
+    /**
+     * The artefact URL a version node of the site declares for the requested coordinates, or null
+     * when the coordinates name no such version. The coordinates follow the proxy grammar
+     * {@code /<groupId as path>/<name>/<version>/<file>}, so the name and the version are the
+     * third- and second-to-last segments. The URL is the one the repository of a git-backed
+     * module declares, and it is served only with an http or https scheme.
+     */
+    static URI declaredArtifact(final JCRSessionWrapper session, final String siteName, final String path)
+            throws RepositoryException {
+        final String[] segments = StringUtils.split(path, '/');
+        if (segments.length < 4) {
+            return null;
+        }
+        final String name = segments[segments.length - 3];
+        final String version = segments[segments.length - 2];
+        final String modulePath = SITES_PATH + siteName + MODULES_REPOSITORY + "/" + name;
+        if (!session.nodeExists(modulePath)) {
+            return null;
+        }
+        final JCRNodeWrapper module = session.getNode(modulePath);
+        if (!module.isNodeType("jnt:forgeModule")) {
+            return null;
+        }
+        for (JCRNodeWrapper child : module.getNodes()) {
+            if (child.isNodeType("jnt:forgeModuleVersion") && child.hasProperty("versionNumber")
+                    && version.equals(child.getProperty("versionNumber").getString()) && child.hasProperty("url")) {
+                final String url = child.getProperty("url").getString();
+                if (url.startsWith("https://") || url.startsWith("http://")) {
+                    try {
+                        return new URI(url);
+                    } catch (URISyntaxException e) {
+                        LOGGER.warn("MavenProxy: version {} of {} declares an unusable artefact URL", version, name);
+                        return null;
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     /** Build the upstream Maven coordinates + credentials from the site's OSGi-config settings. */

@@ -45,8 +45,10 @@
     </scm>
     <properties>
         <jahia-depends>
-            default,facets,rating,siteSettings,videostreaming,graphql-dxm-provider
+            default,facets,rating,siteSettings,videostreaming,graphql-dxm-provider,external-provider
         </jahia-depends>
+        <!-- JGit 6.x is the last line that runs on Java 11; 7.x needs Java 17. -->
+        <jgit.version>6.10.1.202505221210-r</jgit.version>
         <yarn.arguments>build:production</yarn.arguments>
         <require-capability>
             osgi.extender;filter:="(osgi.extender=org.jahia.bundles.blueprint.extender.config)"
@@ -121,6 +123,40 @@
             <version>3.4.0</version>
             <scope>provided</scope>
         </dependency>
+        <!-- Git-backed modules (docs/git-backed-modules.md): the external data provider API of
+             Jahia, and the libraries that read a repository. The compile-scope ones are embedded
+             by the Embed-Dependency instruction below; JavaEWAH is JGit's one runtime dependency
+             that Jahia does not export. -->
+        <dependency>
+            <groupId>org.jahia.modules</groupId>
+            <artifactId>external-provider</artifactId>
+            <version>4.9.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.jgit</groupId>
+            <artifactId>org.eclipse.jgit</artifactId>
+            <version>${jgit.version}</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.googlecode.javaewah</groupId>
+            <artifactId>JavaEWAH</artifactId>
+            <version>1.2.3</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <version>2.4</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark</artifactId>
+            <version>0.29.0</version>
+            <scope>compile</scope>
+        </dependency>
         <!-- Unit tests for the pure security/validation logic (no Jahia container needed). -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -144,7 +180,9 @@
                 <configuration>
                     <instructions>
                         <Jahia-Module-Type>module</Jahia-Module-Type>
-                        <Embed-Dependency>*; scope=compile; type=!pom; inline=false</Embed-Dependency>
+                        <!-- slf4j-api reaches the compile scope through JGit and must stay the
+                             OSGi one: an embedded copy would shadow the import and swallow logs. -->
+                        <Embed-Dependency>*; scope=compile; type=!pom; inline=false; artifactId=!slf4j-api</Embed-Dependency>
                         <!-- Process DS @Component annotations for the GraphQL extensions, the
                              actions package (CreateEntryFromJar — the module-JAR upload action)
                              and the proxy package (MavenProxy). A package omitted here has its
@@ -154,7 +192,17 @@
                              servlet, alias=/mavenproxy → /modules/mavenproxy) unregistered, so every
                              module download 404'd. NB: a @Component added in a NEW package (e.g. a
                              scheduled-job package) must be added here too, or it never activates. -->
-                        <_dsannotations>org.jahia.modules.forge.cache.*,org.jahia.modules.forge.valve.*,org.jahia.modules.forge.graphql.*,org.jahia.modules.forge.actions.*,org.jahia.modules.forge.proxy.*,org.jahia.modules.forge.settings.*,org.jahia.modules.forge.filters.*,org.jahia.modules.forge.migration.*</_dsannotations>
+                        <_dsannotations>org.jahia.modules.forge.cache.*,org.jahia.modules.forge.valve.*,org.jahia.modules.forge.graphql.*,org.jahia.modules.forge.actions.*,org.jahia.modules.forge.proxy.*,org.jahia.modules.forge.settings.*,org.jahia.modules.forge.filters.*,org.jahia.modules.forge.migration.*,org.jahia.modules.forge.git.*</_dsannotations>
+                        <!-- JGit's ssh and gpg integrations live in sibling artifacts the module
+                             does not ship; their packages are referenced reflectively and must not
+                             become mandatory imports. The parent's property carries the packages
+                             the JSPs reference, which bytecode analysis cannot see. -->
+                        <Import-Package>
+                            !com.jcraft.*,
+                            !org.bouncycastle.*,
+                            ${jahia.plugin.projectPackageImport},
+                            *
+                        </Import-Package>
                     </instructions>
                 </configuration>
             </plugin>

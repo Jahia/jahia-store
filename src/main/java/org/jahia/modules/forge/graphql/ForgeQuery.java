@@ -54,4 +54,12 @@ public class ForgeQuery {
             @GraphQLName("type") @GraphQLNonNull final PrincipalType type) {
         return ManageRolesQueryExtension.searchForgePrincipals(siteKey, searchTerm, type);
     }
+
+    @GraphQLField
+    @GraphQLName("gitModules")
+    @GraphQLDescription("The git-backed modules registered on a site")
+    public List<GqlGitModule> gitModules(
+            @GraphQLName("siteKey") @GraphQLNonNull final String siteKey) {
+        return GitModuleMutationExtension.list(siteKey);
+    }
 }
