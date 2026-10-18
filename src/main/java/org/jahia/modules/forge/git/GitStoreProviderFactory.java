@@ -56,6 +56,7 @@ public class GitStoreProviderFactory implements ProviderFactory {
     public static final String P_GIT_URL = "j:gitUrl";
     public static final String P_TAG_PATTERN = "j:tagPattern";
     public static final String P_BRANCH = "j:branch";
+    public static final String P_REGISTERED_BY = "j:registeredBy";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GitStoreProviderFactory.class);
 
@@ -86,6 +87,7 @@ public class GitStoreProviderFactory implements ProviderFactory {
         GitStoreDataSource dataSource = new GitStoreDataSource(reader, branch,
                 VersionTags.compile(StringUtils.defaultIfBlank(pattern, settings.getDefaultTagPattern())),
                 settings.getRefreshMillis(), siteLanguages(path), path);
+        dataSource.setRegisteredBy(optional(mountPoint, P_REGISTERED_BY));
 
         ExternalContentStoreProvider provider = externalContentStoreProviderFactory.newProvider();
         provider.setKey(mountPoint.getIdentifier());

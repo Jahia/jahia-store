@@ -151,3 +151,4 @@
  - j:gitUrl (string) mandatory nofulltext
  - j:tagPattern (string) nofulltext
  - j:branch (string) nofulltext
+ - j:registeredBy (string) nofulltext

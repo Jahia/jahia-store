@@ -36,14 +36,16 @@ public class GqlGitModule {
     private final String gitUrl;
     private final String tagPattern;
     private final String branch;
+    private final String registeredBy;
     private final String path;
     private final String mountStatus;
 
-    public GqlGitModule(String name, String gitUrl, String tagPattern, String branch, String path, String mountStatus) {
+    public GqlGitModule(String name, String gitUrl, String tagPattern, String branch, String registeredBy, String path, String mountStatus) {
         this.name = name;
         this.gitUrl = gitUrl;
         this.tagPattern = tagPattern;
         this.branch = branch;
+        this.registeredBy = registeredBy;
         this.path = path;
         this.mountStatus = mountStatus;
     }
@@ -70,6 +72,12 @@ public class GqlGitModule {
     @GraphQLDescription("The branch that holds the root STORE.md, or null for the default branch")
     public String getBranch() {
         return branch;
+    }
+
+    @GraphQLField
+    @GraphQLDescription("The user the module is registered for, who the module reads as its creator")
+    public String getRegisteredBy() {
+        return registeredBy;
     }
 
     @GraphQLField

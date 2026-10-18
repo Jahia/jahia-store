@@ -129,11 +129,20 @@ name is `<module name>-mount`, so the module is served at
 | `j:gitUrl` | The HTTP URL of the repository. |
 | `j:tagPattern` | The regular expression a tag must match to be a version. Optional. |
 | `j:branch` | The branch that holds the root `STORE.md`. Optional, the default branch of the repository otherwise. |
+| `j:registeredBy` | The user the module is registered for. The module and its versions read that user as `jcr:createdBy`, which is how the storefront lists a developer's own modules. |
 
-The GraphQL mutations `forge { registerGitModule }` and `forge { unregisterGitModule }` create
-and remove the node, for a caller who holds the `siteAdminForgeSettings` permission on the site.
-`registerGitModule` reads the repository first and refuses a repository that fails the contract.
-The query `forge { gitModules }` lists the registrations of a site.
+Two entry points create the node, and both read the repository first and refuse one that fails
+the contract, with the reason:
+
+- A store developer, from the "My modules" page of the storefront, posts the URL to the action
+  `<modules-repository>.registerGitModule.do` over XMLHttpRequest. The action requires the
+  `jahiaForgeUploadModule` permission on the repository, creates the node in a system session,
+  because `/mounts` is not the developer's to write, and records the developer in
+  `j:registeredBy`. A failure answers `{error}` with HTTP 200, as the upload action does.
+- An administrator calls the GraphQL mutation `forge { registerGitModule }`, which requires
+  the `siteAdminForgeSettings` permission on the site. `forge { unregisterGitModule }` and
+  `forge { refreshGitModule }` are administration mutations too, and the query
+  `forge { gitModules }` lists the registrations of a site.
 
 ## Downloads
 

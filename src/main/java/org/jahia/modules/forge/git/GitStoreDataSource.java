@@ -89,6 +89,8 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
     private final String mountPoint;
     private final BiPredicate<String, String> isNodeType;
 
+    private volatile String registeredBy;
+
     private final AtomicReference<GitModule> snapshot = new AtomicReference<>();
     private final Object loadLock = new Object();
     private volatile long lastAttempt;
@@ -124,6 +126,14 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
         } catch (RepositoryException e) {
             return false;
         }
+    }
+
+    /**
+     * The user the module is registered for. The module and its versions read that user as their
+     * creator, which is how the storefront lists a developer's own modules.
+     */
+    public void setRegisteredBy(String registeredBy) {
+        this.registeredBy = StringUtils.trimToNull(registeredBy);
     }
 
     /** Make the next read refresh the module from the repository. */
@@ -283,6 +293,7 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
         Instant lastModified = module.getVersions().isEmpty() ? module.getReadAt() : module.getVersions().get(0).getDate();
         properties.put(Constants.JCR_LASTMODIFIED, single(iso(lastModified)));
         properties.put(Constants.JCR_CREATED, single(iso(oldestDate(module))));
+        putCreator(properties);
 
         Map<String, String[]> translated = new HashMap<>();
         translated.put(Constants.JCR_TITLE, single(manifest.getTitle()));
@@ -308,7 +319,16 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
         properties.put("uploadDate", single(date));
         properties.put(Constants.JCR_CREATED, single(date));
         properties.put(Constants.JCR_LASTMODIFIED, single(date));
+        putCreator(properties);
         return new ExternalData(path, path, TYPE_VERSION, properties);
+    }
+
+    private void putCreator(Map<String, String[]> properties) {
+        String creator = registeredBy;
+        if (creator != null) {
+            properties.put(Constants.JCR_CREATEDBY, single(creator));
+            properties.put(Constants.JCR_LASTMODIFIEDBY, single(creator));
+        }
     }
 
     private ExternalData folder(String name, String type) {
