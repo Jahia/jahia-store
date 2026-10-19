@@ -146,14 +146,18 @@ the contract, with the reason:
 
 ## Downloads
 
-The catalogue JSON and the storefront build the download URL of a version from the module
-coordinates, on the Maven proxy of the site:
+The storefront links a version of a git-backed module to the artefact URL its version node
+declares, the one `STORE.md` gives, so a visitor downloads from the repository's own host and
+nothing passes through the store. A version without a declared URL keeps the proxy link below.
+
+The catalogue JSON that Jahia servers read builds the download URL of every version from the
+module coordinates, on the Maven proxy of the site:
 `/modules/mavenproxy/<siteKey>/<groupId as path>/<name>/<version>/<name>-<version>.jar`.
 
 The proxy resolves these coordinates to the version node of the site. When that node holds a
 `url`, the proxy streams the artefact from that URL without credentials. Otherwise it streams it
-from the Maven repository of the site, as before. A git-backed module therefore needs no change in
-the consumers.
+from the Maven repository of the site, as before. A Jahia server therefore needs no change to
+install a git-backed module.
 
 ## The cache
 
