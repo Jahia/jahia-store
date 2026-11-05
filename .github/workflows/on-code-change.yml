@@ -7,6 +7,12 @@ on:
   pull_request:
     types: [opened, reopened, synchronize]
 
+# Least privilege for GITHUB_TOKEN (CodeQL actions/missing-workflow-permissions).
+# Every write in these jobs uses an explicit secret (Nexus, GH packages, Sonar);
+# GITHUB_TOKEN is only read (checkout, mise-action rate-limit token).
+permissions:
+  contents: read
+
 jobs:
   static-analysis:
     name: Static Analysis (linting, vulns)
