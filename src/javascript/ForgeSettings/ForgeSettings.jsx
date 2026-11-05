@@ -85,11 +85,18 @@ export function ForgeSettings({siteKey}) {
         });
     };
 
-    useEffect(() => {
-        if (data && data.forge && data.forge.settings) {
-            syncFromSettings(data.forge.settings);
-        }
-    }, [data]);
+    // Re-seed the form whenever the query yields a NEW settings object (initial load,
+    // and the refetch after a save). Done during render with a guard - React's
+    // "adjusting state when a prop changes" pattern - instead of a useEffect, which
+    // would render once with stale fields and then cascade a second render
+    // (react-hooks/set-state-in-effect). Apollo keeps the same object reference while
+    // the cache is unchanged, so this runs once per actual result.
+    const settings = data && data.forge && data.forge.settings;
+    const [syncedSettings, setSyncedSettings] = useState(null);
+    if (settings && settings !== syncedSettings) {
+        setSyncedSettings(settings);
+        syncFromSettings(settings);
+    }
 
     const setFooterField = (name, value) => setFooter(prev => ({...prev, [name]: value}));
 
