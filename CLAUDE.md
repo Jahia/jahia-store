@@ -6,14 +6,19 @@
 
 ## Must-knows before editing
 
-- **`_dsannotations` in `pom.xml` must scan both `…graphql.*` and `…actions.*`.**
-  Narrowing it silently un-registers every `@Component(service=Action.class)`.
-  After any pom change, verify the generated `OSGI-INF/*.xml` descriptors exist
-  for the actions.
+- **`_dsannotations` in `pom.xml` must list EVERY package holding a `@Component`:**
+  `…graphql.*`, `…actions.*`, `…proxy.*`, `…settings.*`, **and `…filters.*`**.
+  It is an explicit allow-list (it replaces bnd's default `*`), so any package left
+  out is silently NOT scanned and its `@Component` never registers — this is exactly
+  how `PublishedModuleFilter` was left unregistered (draft modules anonymously
+  readable, SECURITY-571 #54). After any pom change, verify the generated
+  `OSGI-INF/*.xml` descriptor exists for each component (including
+  `…filters.PublishedModuleFilter.xml`).
 - **Write features with a Java side = Jahia Action, not GraphQL.** `/modules/graphql`
   is permission-gated (ordinary users denied). See `actions/CreateEntryFromJar.java`
-  (module-JAR upload: Maven deploy + node creation, runs in the posting workspace)
-  and `actions/PublishModule.java` (publish gate + auto-publish latest version).
+  (module-JAR upload: Maven deploy + node creation, runs in the posting workspace).
+  There is only one Action class (`CreateEntryFromJar`); publishing is done through
+  the GraphQL/JCR publication path and the storefront UI, not a dedicated action.
 - **Action `.do` POSTs need CSRF via XMLHttpRequest** (CSRFGuard patches XHR, not
   `fetch`, not plain `<form>` posts). The `jahia-store-template` client already does this.
   `/modules/graphql` is not CSRF-gated.

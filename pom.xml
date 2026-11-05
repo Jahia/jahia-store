@@ -134,6 +134,35 @@
             <version>3.27.7</version>
             <scope>test</scope>
         </dependency>
+        <!-- Mockito for the NEW orchestration unit tests (MavenProxy.doGet flow, upload/deploy
+             guards, GraphQL access gates, event listeners, render filter). mockito-inline is
+             required to mockStatic(JCRSessionFactory / ProcessHelper / JCRTemplate). -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>4.11.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-junit-jupiter</artifactId>
+            <version>4.11.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-inline</artifactId>
+            <version>4.11.0</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Some Jahia JCR types (JCRNodeWrapper and friends) run static initializers that touch
+             Guava; it is not on the provided classpath, so add it test-scope for the mocks. -->
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>33.3.1-jre</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
     <build>
         <plugins>

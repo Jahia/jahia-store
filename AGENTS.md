@@ -29,17 +29,24 @@ contract.
 
 Two registration mechanisms coexist; know which applies before adding a class:
 
-1. **OSGi Declarative Services** (`@Component`) — used by GraphQL extensions and
-   **Actions**. Which packages get DS descriptors generated is controlled by the
-   bnd **`_dsannotations`** instruction in `pom.xml`.
-   - ⚠️ **CRITICAL GOTCHA**: `_dsannotations` must include *both*
-     `org.jahia.modules.forge.graphql.*` *and* `org.jahia.modules.forge.actions.*`.
-     A past commit narrowed it to graphql-only, which silently **un-registered
-     every `@Component(service=Action.class)`** (including the kept JAR-upload
-     action). Tests that only assert "the form exists" do not catch this — verify
-     the generated `OSGI-INF/*.xml` descriptors after touching the pom.
-2. **Blueprint extender** — used by `filters`, `job`, and `proxy`. These are NOT
-   in `_dsannotations` on purpose.
+**OSGi Declarative Services** (`@Component`) is the ONLY registration mechanism in
+this module. There is no blueprint extender and no `META-INF/spring` / hand-written
+`OSGI-INF`. Everything that must activate — GraphQL extensions, the JAR-upload
+**Action**, the **MavenProxy** servlet, the `ForgeSettings` service + deletion
+listener, AND the **`PublishedModuleFilter`** render filter — is a `@Component`.
+Which packages get DS descriptors generated is controlled by the bnd
+**`_dsannotations`** instruction in `pom.xml`.
+
+- ⚠️ **CRITICAL GOTCHA**: `_dsannotations` is an explicit allow-list that *replaces*
+  bnd's default `*`, so it must enumerate **every** package that holds a `@Component`:
+  `org.jahia.modules.forge.graphql.*`, `…actions.*`, `…proxy.*`, `…settings.*`, **and
+  `…filters.*`**. Any package left out is silently NOT scanned and its component never
+  registers. This has bitten the module twice: a past commit narrowed it to
+  graphql-only (un-registering every `@Component(service=Action.class)`), and
+  `filters.*` was missing (so `PublishedModuleFilter` never registered → draft modules
+  were anonymously readable, SECURITY-571 #54). Tests that only assert "the form
+  exists" do not catch this — verify the generated `OSGI-INF/*.xml` descriptors after
+  touching the pom.
 
 ## Actions vs GraphQL (the permission wall)
 
@@ -98,12 +105,11 @@ authenticated users are denied (`GqlAccessDeniedException`). This shapes the API
 
 ```
 src/main/java/org/jahia/modules/forge/
-  actions/     Jahia Actions (CreateEntryFromJar, PublishModule, AddVideo, …)
+  actions/     Jahia Actions — CreateEntryFromJar (@Component); ForgeMediaMimeListener; MagicByteImageValidator; ActionSecurityUtils
   graphql/     GraphQL extensions (ForgeSettings, CategorySettings, ManageRoles)
-  filters/     render filters (blueprint extender)
-  job/         scheduled jobs (blueprint extender)
-  proxy/       Maven proxy (blueprint extender)
-  tags/        JSP tag/function helpers
+  filters/     PublishedModuleFilter — render filter (@Component service=RenderFilter.class)
+  proxy/       MavenProxy — artifact-download servlet (@Component)
+  settings/    ForgeSettingsService + ForgeSiteDeletionListener (@Component)
 src/main/resources/   CND, views, i18n, moduleList rendering
 tests/                Cypress E2E (+ env tooling) — see below
 ```
