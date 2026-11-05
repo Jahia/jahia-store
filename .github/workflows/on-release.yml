@@ -15,7 +15,7 @@ jobs:
     # downloading the entire world when building.
     # More on https://github.com/Jahia/cimg-mvn-cache
     container:
-      image: ghcr.io/jahia/jahia-docker-mvn-cache:11-jdk-noble-mvn-loaded
+      image: ghcr.io/jahia/jahia-docker-mvn-cache:17-jdk-noble-mvn-loaded
       credentials:
         username: ${{ secrets.GH_PACKAGES_USERNAME }}
         password: ${{ secrets.GH_PACKAGES_TOKEN }}
