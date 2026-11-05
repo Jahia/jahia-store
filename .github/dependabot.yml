@@ -18,6 +18,24 @@ updates:
       prefix: "chore(deps)"
     labels:
       - "dependencies"
+    ignore:
+      # Module Federation SHARED deps (@jahia/webpack-config getModuleFederationConfig):
+      # at runtime the module uses the copy loaded by Jahia's jContent app shell, several
+      # as singletons. Their majors must follow the Jahia platform, never a bot.
+      - dependency-name: "@jahia/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@apollo/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "i18next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-i18next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "graphql-tag"
+        update-types: ["version-update:semver-major"]
     groups:
       npm-security:
         applies-to: security-updates
