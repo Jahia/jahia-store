@@ -1,0 +1,17 @@
+# Same as getNodeProperty, but with the workspace as a variable.
+#
+# Needed because the store front-end renders in LIVE, so an upload performed from it creates its
+# nodes in the live workspace. Reading them back in EDIT finds nothing - the node was never
+# published. (That workspace split is the same one GHSA-f882-3xwv-3439 turns on.)
+query GetNodePropertyInWorkspace($workspace: Workspace!, $path: String!, $name: String!, $language: String) {
+    jcr(workspace: $workspace) {
+        nodeByPath(path: $path) {
+            uuid
+            path
+            properties(names: [$name], language: $language) {
+                name
+                value
+            }
+        }
+    }
+}

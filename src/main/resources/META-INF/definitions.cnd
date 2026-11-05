@@ -104,6 +104,7 @@
  - published (boolean) = false autocreated
  - url (string)
  - references (string) multiple
+ - uploadDate (date) hidden
  + * (jnt:file)
 
 [jnt:forgePackageVersion] > jnt:content, jmix:editorialContent, jmix:forge
@@ -112,6 +113,7 @@
  - fileDsaSignature (string)
  - changeLog (string, richtext) indexed=no
  - published (boolean) = false autocreated
+ - uploadDate (date) hidden
  + modulesList (jnt:forgePackageModulesList)
  + * (jnt:file)
 

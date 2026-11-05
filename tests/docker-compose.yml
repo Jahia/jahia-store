@@ -61,6 +61,12 @@ services:
         environment:
             - MANIFEST=${MANIFEST}
             - SUPER_USER_PASSWORD=${SUPER_USER_PASSWORD}
+            # cypress.config.ts reads these to assert the deployed bundle versions
+            # (01-modulesInstalled). They were never forwarded, so the container always
+            # fell back to the config's hardcoded defaults and asserted a version nobody
+            # had built.
+            - PRIVATEAPPSTORE_VERSION=${PRIVATEAPPSTORE_VERSION}
+            - STORE_TEMPLATE_VERSION=${STORE_TEMPLATE_VERSION}
             - JAHIA_URL=http://jahia:8080
             - NEXUS_URL=http://nexus:8081
             - NEXUS_USERNAME=${NEXUS_USERNAME:-admin}

@@ -1,0 +1,14 @@
+# Capability probe, evaluated in the CALLER's own session.
+#
+# GHSA-f882-3xwv-3439 used this to measure the escalation rather than to infer it: after the live
+# ACL was rewritten, hasPermission(jahiaForgeModerateModule) flipped False -> True in LIVE while
+# staying False in EDIT. jahiaForgeModerateModule is the permission gating whether an uploaded
+# module is published to the store, which is what makes the escalation a supply-chain step.
+query NodeHasPermission($workspace: Workspace!, $path: String!, $permission: String!) {
+    jcr(workspace: $workspace) {
+        nodeByPath(path: $path) {
+            path
+            hasPermission(permissionName: $permission)
+        }
+    }
+}

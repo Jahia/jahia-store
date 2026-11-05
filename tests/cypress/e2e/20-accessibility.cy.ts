@@ -24,19 +24,10 @@ describe('Accessibility — WCAG 2.2 AAA gate (JS module)', () => {
 
     // Full WCAG ladder up to AAA + the landmark/region best practices that the
     // manual audit flagged (duplicate/nested <main>, unique landmarks).
-    const AXE_RUN: {runOnly: {type: 'tag'; values: string[]}} = {
+    const AXE_RUN: { runOnly: { type: 'tag'; values: string[] } } = {
         runOnly: {
             type: 'tag',
-            values: [
-                'wcag2a',
-                'wcag2aa',
-                'wcag2aaa',
-                'wcag21a',
-                'wcag21aa',
-                'wcag21aaa',
-                'wcag22aa',
-                'best-practice'
-            ]
+            values: ['wcag2a', 'wcag2aa', 'wcag2aaa', 'wcag21a', 'wcag21aa', 'wcag21aaa', 'wcag22aa', 'best-practice']
         }
     };
 
@@ -55,11 +46,9 @@ describe('Accessibility — WCAG 2.2 AAA gate (JS module)', () => {
         cy.checkA11y(undefined, AXE_RUN, logViolations);
     };
 
-    const createForgeModule: DocumentNode =
-        require('graphql-tag/loader!../fixtures/graphql/mutation/createForgeModule.graphql');
+    const createForgeModule: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/createForgeModule.graphql');
 
-    const addNodeWithProps: DocumentNode =
-        require('graphql-tag/loader!../fixtures/graphql/mutation/addNodeWithProperties.graphql');
+    const addNodeWithProps: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/addNodeWithProperties.graphql');
 
     const islandBundle = '/modules/jahia-store-template/dist/client/components/forge/ModuleEditor.client.tsx.js';
 
@@ -105,7 +94,11 @@ describe('Accessibility — WCAG 2.2 AAA gate (JS module)', () => {
                 properties: [
                     {name: 'versionNumber', value: '1.0.0'},
                     {name: 'published', value: 'true'},
-                    {name: 'changeLog', value: '<ul><li>Initial release</li></ul>'}
+                    {name: 'changeLog', value: '<ul><li>Initial release</li></ul>'},
+                    // Declares a dependency on the "seo" module created below, so the detail page's
+                    // [data-dependency-lists] section (otherwise never rendered by this spec) is
+                    // present during the WCAG audit too.
+                    {name: 'references', values: ['seo']}
                 ]
             }
         });

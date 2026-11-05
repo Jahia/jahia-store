@@ -17,8 +17,15 @@
                         jcr:primaryType="jnt:externalPermissions"/>
     </store-administrator>
 
+    <!-- SEC-366 / GHSA-f882-3xwv-3439: this role must NOT carry any *_live ACL permission.
+         jcr:modifyAccessControl_live at site scope let anyone allowed to upload a module rewrite
+         the site's live ACL - self-promote to store-administrator (gaining jahiaForgeModerateModule,
+         the gate on publishing a module to the store) and strip g:site-administrators - with no
+         publication step to make it reviewable. It was only ever here so that the upload could
+         grant the uploader the owner role on its own new nodes; that grant now runs in a system
+         session (OwnerRoleGrants), so nothing in the feature needs live ACL authority. -->
     <store-developer j:hidden="false"
-                         j:permissionNames="jahiaForgeUploadModule jcr:write_live jcr:modifyAccessControl_live"
+                         j:permissionNames="jahiaForgeUploadModule jcr:write_live"
                          j:privilegedAccess="true"
                          j:roleGroup="site-role"
                          jcr:primaryType="jnt:role">

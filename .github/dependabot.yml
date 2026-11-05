@@ -1,11 +1,107 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
+# Dependabot configuration
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Updates are grouped per ecosystem/directory so a week's minor/patch bumps
+# (and, separately, security fixes) land as ONE pull request instead of one
+# PR per package. Major bumps stay as individual PRs so they get reviewed.
 
 version: 2
 updates:
-  - package-ecosystem: "" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  # Module frontend (webpack build) — /package.json + /yarn.lock
+  - package-ecosystem: "npm"
+    directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+    ignore:
+      # Module Federation SHARED deps (@jahia/webpack-config getModuleFederationConfig):
+      # at runtime the module uses the copy loaded by Jahia's jContent app shell, several
+      # as singletons. Their majors must follow the Jahia platform, never a bot.
+      - dependency-name: "@jahia/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@apollo/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "i18next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-i18next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "graphql-tag"
+        update-types: ["version-update:semver-major"]
+    groups:
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
+      npm-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # Cypress e2e test harness — independent /tests/package.json + /tests/yarn.lock
+  - package-ecosystem: "npm"
+    directory: "/tests"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+    ignore:
+      # Cypress majors need spec migration + @jahia/cypress compatibility: upgrade by hand.
+      - dependency-name: "cypress"
+        update-types: ["version-update:semver-major"]
+    groups:
+      tests-security:
+        applies-to: security-updates
+        patterns: ["*"]
+      tests-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # Java module — only build/test-scoped libraries.
+  # Platform-provided artifacts must match the targeted Jahia runtime and are
+  # bumped deliberately together with the jahia-modules parent, never by bot.
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+    ignore:
+      - dependency-name: "org.jahia.*:*"
+      - dependency-name: "org.springframework:*"
+      - dependency-name: "com.graphql-java:*"
+      - dependency-name: "io.github.graphql-java:*"
+      - dependency-name: "javax.servlet:*"
+    groups:
+      maven-test-and-build:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # GitHub Actions used by the CI workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+    groups:
+      actions:
+        patterns: ["*"]

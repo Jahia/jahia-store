@@ -153,6 +153,19 @@ tests/                Cypress E2E (+ env tooling) — see below
 - **Do not break the `moduleList.json` external contract** — it is consumed by
   `jahia-store-template` (and possibly external clients).
 
+### Test invariant — spec 25 guards the sibling module, not this one (SEC-375)
+
+`tests/cypress/e2e/25-fragmentCacheIdentity.cy.ts` covers a defect in
+**`jahia-store-template`** (GHSA-g6wp-ghxm-mx76: Jahia's fragment cache key models
+permissions but not identity, so one logged-in user was served another's username
+and another's module list). It lives here because the E2E harness does, so from
+this repo it can look orphaned — it is not; do not drop it when pruning specs.
+
+Two properties of that spec are load-bearing and are easy to "clean up" into
+uselessness. Its two users must keep the **same** role, and nothing may flush the
+render cache or vary the URL between its arms. Either change lets a fully broken
+build pass. Its file header explains why — read it before editing.
+
 ### Deployment invariant — MavenProxy on a PUBLIC store (SECURITY-571 #57)
 
 `MavenProxy` deliberately serves **raw** Maven coordinates (not only catalogued

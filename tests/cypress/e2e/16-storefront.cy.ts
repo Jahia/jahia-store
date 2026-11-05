@@ -37,6 +37,10 @@ describe('Storefront read views (JS module)', () => {
     const addNode = (parentPath: string, name: string, primaryNodeType: string, properties: object[] = []) =>
         cy.apollo({mutation: addNodeWithProps, variables: {parentPath, name, primaryNodeType, properties}});
 
+    /** Seeded release (upload) date of analytics 1.0.0, and the day the storefront must show. */
+    const releasedOn = '2024-05-06T10:00:00.000+02:00';
+    const releasedDay = '2024-05-06';
+
     /**
      * Clear the header search via its native clear gesture (the `search` event) and wait for the
      * programmatic-submit reload it triggers. `.trigger('search')` causes a requestSubmit()
@@ -93,9 +97,11 @@ describe('Storefront read views (JS module)', () => {
         // GroupId is intrinsic to a JAR module; the version download URL is GENERATED
         // from it (+ name/version/site), not stored on the version node.
         setNodeProperty(`${repo}/analytics`, 'groupId', 'org.cypress.test', 'en');
+        // Seeded in the past so the assertions can tell it apart from jcr:lastModified.
         addNode(`${repo}/analytics`, 'v100', 'jnt:forgeModuleVersion', [
             {name: 'versionNumber', value: '1.0.0'},
             {name: 'published', value: 'true'},
+            {name: 'uploadDate', value: releasedOn},
             {name: 'changeLog', value: '<ul><li>Initial release</li></ul>'}
         ]);
         addNode(`${repo}/analytics`, 'video', 'jnt:videostreaming', [
@@ -256,8 +262,8 @@ describe('Storefront read views (JS module)', () => {
 
     it('orders the grid by release date, most recent first', () => {
         // A module's release date lives on its version nodes (the grid sorts modules by their
-        // newest published version's date, descending). analytics's only release (1.0.0) was
-        // created during seed; give seo a release NOW so it is the newest in the catalogue and
+        // newest published version's date, descending). analytics's only release (1.0.0) carries
+        // a 2024 uploadDate; give seo a release NOW so it is the newest in the catalogue and
         // must lead the grid. Cleaned up afterwards so later specs see seo version-less again.
         addNode(`${repo}/seo`, 'v100', 'jnt:forgeModuleVersion', [
             {name: 'versionNumber', value: '1.0.0'},
@@ -297,9 +303,10 @@ describe('Storefront read views (JS module)', () => {
             cy.contains('a', 'Download')
                 .should('have.attr', 'href')
                 .and('contain', 'analytics-1.0.0.jar');
-            // The per-version footer surfaces the release date (jcr:lastModified) — regression
-            // for the dropped "Updated" / "Requires Jahia" version metadata.
-            cy.get('[data-forge-version]').contains(/Updated/i).should('be.visible');
+            // The per-version footer surfaces the release date (uploadDate) — regression for the
+            // dropped "Released" / "Requires Jahia" version metadata.
+            cy.get('[data-forge-version]').contains(/Released/i).should('be.visible');
+            cy.get('[data-forge-version]').should('contain.text', releasedDay);
         });
     });
 
@@ -326,7 +333,37 @@ describe('Storefront read views (JS module)', () => {
         cy.get('[data-detail-info]').within(() => {
             cy.contains('dt', 'Module ID').next('dd').should('contain.text', 'analytics');
             cy.contains('dt', /status/i).next('dd').should('contain.text', 'supported');
+            // "Released" is the newest PUBLISHED version's upload date — NOT the module node's
+            // jcr:lastModified, which the seeding writes above moved to "now".
+            cy.contains('dt', /released/i).next('dd').should('have.text', releasedDay);
         });
+    });
+
+    it('keeps the release date fixed when the module and its version are edited', () => {
+        // Touch both nodes; neither date may move.
+        setNodeProperty(`${repo}/analytics/v100`, 'changeLog', '<ul><li>Edited changelog</li></ul>', 'en');
+        setNodeProperty(`${repo}/analytics`, 'description', '<p>Edited description.</p>', 'en');
+
+        // ...and the dates must not have moved, in the rail or on the version card.
+        cy.visit(detailRender);
+        cy.get('[data-detail-info]').within(() => {
+            cy.contains('dt', /released/i).next('dd').should('have.text', releasedDay);
+        });
+        cy.get('[data-versions-open][data-versions-ready="true"]', {timeout: 20000}).click();
+        cy.get('[data-versions-dialog][open]').within(() => {
+            cy.get('[data-forge-version]').should('contain.text', releasedDay);
+        });
+
+        // Restore the seeded content so later specs see the original fixture.
+        setNodeProperty(`${repo}/analytics/v100`, 'changeLog', '<ul><li>Initial release</li></ul>', 'en');
+        setNodeProperty(`${repo}/analytics`, 'description', '<p>Real-time charts and KPI widgets.</p>', 'en');
+    });
+
+    it('omits the release date while every version is still a draft', () => {
+        // No published version: the rail shows no date rather than the module's own.
+        cy.visit(`/cms/render/default/en${repo}/draft.html`);
+        cy.get('[data-detail-info]', {timeout: 20000}).should('be.visible');
+        cy.get('[data-detail-info]').contains('dt', /released/i).should('not.exist');
     });
 
     it('the "My modules" list shows the user own modules, including drafts', () => {

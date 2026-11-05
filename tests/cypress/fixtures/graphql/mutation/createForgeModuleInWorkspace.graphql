@@ -1,0 +1,32 @@
+# Same as createForgeModule, but with the workspace as a variable.
+#
+# Needed because the store front-end renders in LIVE: a module a developer uploads through it is
+# created in the live workspace and nothing publishes it into EDIT (see 24-uploadOwnerAcl). A
+# fixture that seeds "the modules a user owns" has to land them where the front-end will read
+# them, so the SEC-375 my-modules arm creates directly in LIVE.
+#
+# jcr:createdBy is set by the repository from the calling session, which is the whole point here:
+# run this through cy.apolloClient(creds) and the node is owned by that user, which is what
+# ForgeMyModulesList filters on.
+mutation CreateForgeModuleInWorkspace(
+    $workspace: Workspace!
+    $parentPath: String!
+    $name: String!
+    $title: String!
+) {
+    jcr(workspace: $workspace) {
+        addNode(
+            parentPathOrId: $parentPath
+            name: $name
+            primaryNodeType: "jnt:forgeModule"
+            properties: [
+                { name: "jcr:title", value: $title, language: "en" }
+            ]
+        ) {
+            node {
+                uuid
+                path
+            }
+        }
+    }
+}

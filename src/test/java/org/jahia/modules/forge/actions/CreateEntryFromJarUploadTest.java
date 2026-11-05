@@ -1,10 +1,6 @@
 package org.jahia.modules.forge.actions;
 
-import org.jahia.api.Constants;
 import org.jahia.data.templates.ModuleReleaseInfo;
-import org.jahia.services.content.JCRNodeWrapper;
-import org.jahia.services.content.JCRSessionWrapper;
-import org.jahia.services.usermanager.JahiaUser;
 import org.jahia.utils.ProcessHelper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,8 +12,6 @@ import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -25,10 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -40,7 +31,7 @@ import static org.mockito.Mockito.when;
  * initializers that need a live container, so it is covered at the integration level). Seams used
  * here, all behaviour-preserving (no source change):
  * <ul>
- *   <li>{@code grantOwnerRole} / {@code deployToMaven} are private — invoked by reflection.</li>
+ *   <li>{@code deployToMaven} is private — invoked by reflection.</li>
  *   <li>{@code ProcessHelper.execute} is statically mocked (mockito-inline) so no real Maven runs.</li>
  * </ul>
  */
@@ -79,34 +70,10 @@ class CreateEntryFromJarUploadTest {
     }
 
     // ---- S11 / U4 / D12 : owner-role grant skips guest -------------------------------------
-
-    @Test
-    @DisplayName("S11: grantOwnerRole grants the owner role to a real user")
-    void grantOwnerRole_realUser_grants() throws Exception {
-        JCRSessionWrapper session = mock(JCRSessionWrapper.class);
-        JahiaUser user = mock(JahiaUser.class);
-        when(user.getUsername()).thenReturn("alice");
-        when(session.getUser()).thenReturn(user);
-        JCRNodeWrapper node = mock(JCRNodeWrapper.class);
-
-        declared("grantOwnerRole", JCRSessionWrapper.class, JCRNodeWrapper.class).invoke(null, session, node);
-
-        verify(node, times(1)).grantRoles(eq("u:alice"), eq(new HashSet<>(Collections.singletonList("owner"))));
-    }
-
-    @Test
-    @DisplayName("S11: grantOwnerRole SKIPS the guest user (no owner ACL for anonymous)")
-    void grantOwnerRole_guest_skipped() throws Exception {
-        JCRSessionWrapper session = mock(JCRSessionWrapper.class);
-        JahiaUser user = mock(JahiaUser.class);
-        when(user.getUsername()).thenReturn(Constants.GUEST_USERNAME);
-        when(session.getUser()).thenReturn(user);
-        JCRNodeWrapper node = mock(JCRNodeWrapper.class);
-
-        declared("grantOwnerRole", JCRSessionWrapper.class, JCRNodeWrapper.class).invoke(null, session, node);
-
-        verify(node, never()).grantRoles(anyString(), any());
-    }
+    // CreateEntryFromJar.grantOwnerRole was replaced by OwnerRoleGrants (SEC-366: deferred,
+    // system-session grant scoped to the upload subtree). S11 is covered there:
+    // OwnerRoleGrantsTest#shouldRecord_newNode_isTrue / #recordOwner_newNode_isQueued (real user)
+    // and #shouldRecord_guest_isFalse / #recordOwner_guest_queuesNothing (guest skipped).
 
     // ---- S12 / U6 : deploy re-validates pom coordinates before shelling out ----------------
 

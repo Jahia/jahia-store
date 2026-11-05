@@ -30,6 +30,10 @@ describe('Modules deployed', () => {
         `${symbolicName}/${toOsgiVersion(mavenVersion)}`;
 
     const expectBundleActive = (symbolicName: string, mavenVersion: string) => {
+        // An unset version would silently build the key "<name>/undefined" and fail
+        // several assertions later with nothing pointing back at the cause.
+        expect(mavenVersion, `no version configured for ${symbolicName} - set it in .env or cypress.config.ts`)
+            .to.be.a('string').and.not.be.empty;
         const key = bundleKey(symbolicName, mavenVersion);
         cy.request({
             url: `/modules/api/bundles/${key}/_info`,
@@ -44,9 +48,17 @@ describe('Modules deployed', () => {
                 osgiState?: string
                 moduleState?: string
                 type?: string
+                message?: string
             }>;
             expect(entries, `info payload for ${key}`).to.have.length.greaterThan(0);
             entries.forEach((info, idx) => {
+                // Module Management answers 200 with {message, cause} when the key does
+                // not resolve, so the status check above cannot tell "not deployed" from
+                // "deployed under a different version". Name that case explicitly -
+                // otherwise a stale configured version reads as "expected undefined to
+                // equal ACTIVE", which points at the wrong thing.
+                expect(info.message, `no bundle for ${key} - the configured version is probably stale`)
+                    .to.be.undefined;
                 expect(info.osgiState, `osgiState[${idx}] for ${key}`).to.equal('ACTIVE');
                 expect(info.moduleState, `moduleState[${idx}] for ${key}`).to.equal('STARTED');
             });

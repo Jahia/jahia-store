@@ -1,0 +1,21 @@
+# Access-control entries on a node, with the roles each one grants.
+#
+# Jahia names an ACE node after the PRINCIPAL only (e.g. "GRANT_u_storedev") and keeps the roles
+# in its j:roles property. Asserting on the node name alone therefore proves an entry exists for
+# someone, not that it grants anything - which is why this reads j:roles too.
+query GetAclEntries($workspace: Workspace!, $path: String!) {
+    jcr(workspace: $workspace) {
+        nodeByPath(path: $path) {
+            path
+            children {
+                nodes {
+                    name
+                    properties(names: ["j:roles"]) {
+                        name
+                        values
+                    }
+                }
+            }
+        }
+    }
+}

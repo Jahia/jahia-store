@@ -93,7 +93,7 @@ def VERSION_TYPES     = ['jnt:forgeModuleVersion', 'jnt:forgePackageVersion'] as
 def MODULE_TYPES      = ['jnt:forgeModule', 'jnt:forgePackage'] as Set
 
 def report = new StringBuilder()
-def stats  = [modulesCopied: 0, modulesSkipped: 0, versionsRemapped: 0, urlsDropped: 0, reqVersionsCopied: 0, statusNormalized: 0, datesPreserved: 0, warnings: 0]
+def stats  = [modulesCopied: 0, modulesSkipped: 0, versionsRemapped: 0, urlsDropped: 0, reqVersionsCopied: 0, statusNormalized: 0, datesPreserved: 0, uploadDatesSeeded: 0, warnings: 0]
 def log    = { String msg -> report.append(msg).append('\n'); println msg }
 def warn   = { String msg -> stats.warnings++; log("  ! WARN: ${msg}") }
 
@@ -282,6 +282,12 @@ JCRTemplate.getInstance().doExecuteWithSystemSession(null, WORKSPACE, { JCRSessi
             // Preserve the version's historical "updated" date (the date the storefront shows /
             // sorts "Latest releases" by) before any other change re-stamps it.
             preserveLastModified(tv, sv)
+            // Freeze the preserved date into uploadDate: the jcr:lastModified fallback
+            // drifts as soon as anyone edits this version in the target store.
+            if (!tv.hasProperty('uploadDate') && tv.hasProperty('jcr:lastModified')) {
+                tv.setProperty('uploadDate', tv.getProperty('jcr:lastModified').getDate())
+                stats.uploadDatesSeeded++
+            }
             if (sv.hasProperty('requiredVersion')) {
                 String reqName
                 try {
@@ -293,7 +299,7 @@ JCRTemplate.getInstance().doExecuteWithSystemSession(null, WORKSPACE, { JCRSessi
                 stats.versionsRemapped++
             }
         }
-        log("  re-pointed ${stats.versionsRemapped} version(s); dropped ${stats.urlsDropped} stale url(s); normalized ${stats.statusNormalized} status value(s); preserved ${stats.datesPreserved} updated date(s)")
+        log("  re-pointed ${stats.versionsRemapped} version(s); dropped ${stats.urlsDropped} stale url(s); normalized ${stats.statusNormalized} status value(s); preserved ${stats.datesPreserved} updated date(s); seeded ${stats.uploadDatesSeeded} release date(s)")
     } else {
         // dry-run: just count what exists on the source
         collect(srcRepo, MODULE_TYPES, []).each { JCRNodeWrapper sm ->
