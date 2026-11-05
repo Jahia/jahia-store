@@ -25,10 +25,10 @@
   "dependencies": {
     "@apollo/client": "^3.8.2",
     "@apollo/react-hooks": "^3",
-    "@jahia/moonstone": "^2.16.2",
+    "@jahia/moonstone": "^2.21.1",
     "@jahia/ui-extender": "^1.1.0",
     "graphql": "^15.8.0",
-    "graphql-tag": "^2.12.6",
+    "graphql-tag": "^2.12.7",
     "i18next": "^21.6.14",
     "prop-types": "^15.8.1",
     "react": "^18.3.1",
@@ -49,7 +49,7 @@
     "@babel/plugin-syntax-dynamic-import": "^7.8.3",
     "@babel/preset-env": "^7.24.4",
     "@babel/preset-react": "^7.24.1",
-    "@cyclonedx/webpack-plugin": "^5.3.2",
+    "@cyclonedx/webpack-plugin": "^5.3.3",
     "@jahia/webpack-config": "^1.1.0",
     "babel-loader": "^10.0.0",
     "clean-webpack-plugin": "^4.0.0",
@@ -60,12 +60,12 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "file-loader": "^6.2.0",
     "rimraf": "^5.0.5",
-    "sass": "^1.52.1",
+    "sass": "^1.107.1",
     "sass-loader": "^12.4.0",
     "strip-ansi": "^6.0.1",
     "style-loader": "^3.3.1",
     "sync-pom-version-to-package": "^1.6.1",
-    "webpack": "^5.91.0",
+    "webpack": "^5.112.2",
     "webpack-cli": "^5.1.4"
   }
 }
