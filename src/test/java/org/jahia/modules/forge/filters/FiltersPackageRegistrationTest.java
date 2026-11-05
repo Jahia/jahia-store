@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * ABORTED/SKIPPED (with this reason), not FAILED. Once Stage 7 adds
  * {@code org.jahia.modules.forge.filters.*} to {@code _dsannotations}, the assumption holds and the
  * subsequent assertion turns this test GREEN. The live end-to-end confirmation is Cypress
- * {@code 24-publishedFilterRuns.cy.ts}.
+ * {@code 30-publishedFilterRuns.cy.ts}.
  */
 class FiltersPackageRegistrationTest {
 

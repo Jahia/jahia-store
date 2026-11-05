@@ -25,7 +25,7 @@ import static org.mockito.Mockito.when;
  *
  * <p>NOTE: this pins the filter LOGIC. Whether the filter actually REGISTERS (and therefore runs)
  * is a separate packaging concern — see {@code FiltersPackageRegistrationTest} and Cypress
- * {@code 24-publishedFilterRuns.cy.ts} (the {@code filters.*} / {@code _dsannotations} bug).
+ * {@code 30-publishedFilterRuns.cy.ts} (the {@code filters.*} / {@code _dsannotations} bug).
  */
 class PublishedModuleFilterTest {
 
