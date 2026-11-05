@@ -26,7 +26,7 @@
     "@apollo/client": "^3.8.2",
     "@apollo/react-hooks": "^3",
     "@jahia/moonstone": "^2.16.2",
-    "@jahia/ui-extender": "^1.1.0",
+    "@jahia/ui-extender": "^2.0.0",
     "graphql": "^15.8.0",
     "graphql-tag": "^2.12.6",
     "i18next": "^21.6.14",
