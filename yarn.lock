@@ -21,23 +21,25 @@
     tslib "^2.3.0"
     zen-observable-ts "^1.2.5"
 
-"@apollo/react-common@^3.1.4":
-  version "3.1.4"
-  resolved "https://registry.yarnpkg.com/@apollo/react-common/-/react-common-3.1.4.tgz#ec13c985be23ea8e799c9ea18e696eccc97be345"
-  integrity sha512-X5Kyro73bthWSCBJUC5XYQqMnG0dLWuDZmVkzog9dynovhfiVCV4kPSdgSIkqnb++cwCzOVuQ4rDKVwo2XRzQA==
+"@apollo/client@latest":
+  version "4.3.6"
+  resolved "https://registry.yarnpkg.com/@apollo/client/-/client-4.3.6.tgz#036a3e41d1ee79c3ba171ca33def3904132f4204"
+  integrity sha512-hGpMGPur4S5KJlWakVIKo5ly7Sp0dx+2yOiVz+gIG8S+D+deZO/Xi9mhSsdMTiGF2q1rAg5nymnQUJsctEAkKg==
   dependencies:
-    ts-invariant "^0.4.4"
-    tslib "^1.10.0"
+    "@graphql-typed-document-node/core" "^3.1.1"
+    "@wry/caches" "^1.0.0"
+    "@wry/equality" "^0.5.6"
+    "@wry/trie" "^0.5.0"
+    graphql-tag "^2.12.6"
+    optimism "^0.18.0"
+    tslib "^2.3.0"
 
-"@apollo/react-hooks@^3":
-  version "3.1.5"
-  resolved "https://registry.yarnpkg.com/@apollo/react-hooks/-/react-hooks-3.1.5.tgz#7e710be52461255ae7fc0b3b9c2ece64299c10e6"
-  integrity sha512-y0CJ393DLxIIkksRup4nt+vSjxalbZBXnnXxYbviq/woj+zKa431zy0yT4LqyRKpFy9ahMIwxBnBwfwIoupqLQ==
+"@apollo/react-hooks@^4":
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/@apollo/react-hooks/-/react-hooks-4.0.0.tgz#7bf7b320c90d276f637d9a84b503e17b840dd4e6"
+  integrity sha512-fCu0cbne3gbUl0QbA8X4L33iuuFVQbC5Jo2MIKRK8CyawR6PoxDpFdFA1kc6033ODZuZZ9Eo4RdeJFlFIIYcLA==
   dependencies:
-    "@apollo/react-common" "^3.1.4"
-    "@wry/equality" "^0.1.9"
-    ts-invariant "^0.4.4"
-    tslib "^1.10.0"
+    "@apollo/client" latest
 
 "@babel/code-frame@^7.29.7":
   version "7.29.7"
@@ -1457,13 +1459,6 @@
   integrity sha512-jmT7Sb4ZQWI5iyu3lobQxICu2nC/vbUhP0vIdd6tHC9PTfenmRmuIFqktc6GH9cgi+ZHnsLWPvfSvc4DrYmKiQ==
   dependencies:
     tslib "^2.3.0"
-
-"@wry/equality@^0.1.9":
-  version "0.1.11"
-  resolved "https://registry.yarnpkg.com/@wry/equality/-/equality-0.1.11.tgz#35cb156e4a96695aa81a9ecc4d03787bc17f1790"
-  integrity sha512-mwEVBDUVODlsQQ5dfuLUS5/Tf7jqUKyhKYHmVi4fPB6bDMOfWvUPJmKgS1Z7Za/sOI3vzWt4+O7yCiL/70MogA==
-  dependencies:
-    tslib "^1.9.3"
 
 "@wry/equality@^0.5.6":
   version "0.5.7"
@@ -4848,18 +4843,6 @@ ts-invariant@^0.10.3:
   integrity sha512-uivwYcQaxAucv1CzRp2n/QdYPo4ILf9VXgH19zEIjFx2EJufV16P0JtJVpYHy89DItG6Kwj2oIUjrcK5au+4tQ==
   dependencies:
     tslib "^2.1.0"
-
-ts-invariant@^0.4.4:
-  version "0.4.4"
-  resolved "https://registry.yarnpkg.com/ts-invariant/-/ts-invariant-0.4.4.tgz#97a523518688f93aafad01b0e80eb803eb2abd86"
-  integrity sha512-uEtWkFM/sdZvRNNDL3Ehu4WVpwaulhwQszV8mrtcdeE8nN00BV9mAmQ88RkrBhFgl9gMgvjJLAQcZbnPXI9mlA==
-  dependencies:
-    tslib "^1.9.3"
-
-tslib@^1.10.0, tslib@^1.9.3:
-  version "1.14.1"
-  resolved "https://registry.yarnpkg.com/tslib/-/tslib-1.14.1.tgz#cf2d38bdc34a134bcaf1091c41f6619e2f672d00"
-  integrity sha512-Xni35NKzjgMrwevysHTCArtLDpPvye8zV/0E4EyYn43P7/7qvQwPh9BGkHewbMulVntbigmcT7rdX3BNo9wRJg==
 
 tslib@^2.1.0, tslib@^2.3.0:
   version "2.8.1"

@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@apollo/client": "^3.8.2",
-    "@apollo/react-hooks": "^3",
+    "@apollo/react-hooks": "^4",
     "@jahia/moonstone": "^2.16.2",
     "@jahia/ui-extender": "^1.1.0",
     "graphql": "^15.8.0",
