@@ -1,5 +1,31 @@
 import {defineConfig} from 'cypress';
 import fs from 'fs';
+import path from 'path';
+
+/**
+ * Version of the artifact staged in ./artifacts by ci.build.sh, i.e. exactly what the
+ * snapshot provisioning manifest installs. Deriving it here keeps 01-modulesInstalled
+ * in step with every version bump; a hardcoded default went stale on each release and
+ * asserted a version nobody had built. The digit right after the prefix keeps
+ * "jahia-store-" from matching "jahia-store-template-...".
+ */
+const stagedVersion = (pattern: RegExp): string | undefined => {
+    const dir = path.resolve(__dirname, 'artifacts');
+    if (!fs.existsSync(dir)) {
+        return undefined;
+    }
+
+    const match = fs.readdirSync(dir).map(f => pattern.exec(f)).find(Boolean);
+    return match ? match[1] : undefined;
+};
+
+// Staged artifact first (what is actually deployed), then an explicit env var (e.g. a
+// run against released versions from Nexus). No default: an unset version must fail
+// 01-modulesInstalled with its "no version configured" message, not test a stale one.
+const PRIVATEAPPSTORE_VERSION =
+    stagedVersion(/^jahia-store-(\d[\w.]*-SNAPSHOT)\.jar$/) || process.env.PRIVATEAPPSTORE_VERSION || '';
+const STORE_TEMPLATE_VERSION =
+    stagedVersion(/^jahia-store-template-(\d[\w.]*-SNAPSHOT)\.tgz$/) || process.env.STORE_TEMPLATE_VERSION || '';
 
 export default defineConfig({
     // DefaultCommandTimeout: 10000,
@@ -42,7 +68,7 @@ export default defineConfig({
     },
     env: {
         SUPER_USER_PASSWORD: process.env.SUPER_USER_PASSWORD || 'root1234',
-        PRIVATEAPPSTORE_VERSION: process.env.PRIVATEAPPSTORE_VERSION || '5.1.2-SNAPSHOT',
-        STORE_TEMPLATE_VERSION: process.env.STORE_TEMPLATE_VERSION || '5.0.6-SNAPSHOT'
+        PRIVATEAPPSTORE_VERSION,
+        STORE_TEMPLATE_VERSION
     }
 });
