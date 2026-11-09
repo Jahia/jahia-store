@@ -24,7 +24,7 @@
     "cypress-iframe": "^1.0.1",
     "cypress-mailpit": "^1.4.0",
     "cypress-multi-reporters": "^2.0.5",
-    "cypress-terminal-report": "^5.3.7",
+    "cypress-terminal-report": "^7.4.0",
     "cypress-wait-until": "^3.0.1",
     "dotenv": "^10.0.0",
     "eslint": "^8.51.0",
