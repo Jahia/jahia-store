@@ -2200,10 +2200,10 @@ cypress-mailpit@^1.4.0:
   version "1.4.0"
   resolved "https://registry.yarnpkg.com/cypress-mailpit/-/cypress-mailpit-1.4.0.tgz#eaf5a42014181cff6b6da1f8e999794e89a8cb05"
 
-cypress-multi-reporters@^2.0.5:
-  version "2.0.5"
-  resolved "https://registry.yarnpkg.com/cypress-multi-reporters/-/cypress-multi-reporters-2.0.5.tgz#2ef058ac7ea1f03adf368eee47c61d7d4f2644db"
-  integrity sha512-5ReXlNE7C/9/rpDI3z0tAJbPXsTHK7P3ogvUtBntQlmctRQ+sSMts7dIQY5MTb0XfBSge3CuwvNvaoqtw90KSQ==
+cypress-multi-reporters@^2.1.0:
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/cypress-multi-reporters/-/cypress-multi-reporters-2.1.0.tgz#c664fe4ab18840d44e8398710481f053eeb997cc"
+  integrity sha512-QCxLVZPkIRjAykSY8EfWWlVhLVeGh0iAsZpXJhsHbP7mmHN6GGVUPUEhZfLy3FO5kd5bGhmjGsW/YY9h3qADbw==
   dependencies:
     debug "^4.4.0"
     lodash "^4.17.21"
