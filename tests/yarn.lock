@@ -883,7 +883,7 @@
   version "8.57.1"
   resolved "https://registry.yarnpkg.com/@eslint/js/-/js-8.57.1.tgz#de633db3ec2ef6a3c89e2f19038063e8a122e2c2"
 
-"@faker-js/faker@^10.6.0":
+"@faker-js/faker@^10.3.0", "@faker-js/faker@^10.6.0":
   version "10.6.0"
   resolved "https://registry.yarnpkg.com/@faker-js/faker/-/faker-10.6.0.tgz#b6b0248f0f59e0ac69ad6803167d58bb824f929d"
   integrity sha512-3RQHgEtvL1Frl/d1cSreo7qhJ3Gk1OdNUai/CtZ8G+wYeRQnJih3s9xJ9/kgYekPQRdwgh0HXRPqMlzWGwivIQ==
@@ -922,14 +922,19 @@
   version "0.1.6"
   resolved "https://registry.yarnpkg.com/@istanbuljs/schema/-/schema-0.1.6.tgz#8dc9afa2ac1506cb1a58f89940f1c124446c8df3"
 
-"@jahia/cypress@^7.0.0":
-  version "7.4.0"
-  resolved "https://registry.yarnpkg.com/@jahia/cypress/-/cypress-7.4.0.tgz#6e20a77424dfb29c0ff81d36881f8e9740faf7ac"
+"@jahia/cypress@^8.9.0":
+  version "8.9.0"
+  resolved "https://registry.yarnpkg.com/@jahia/cypress/-/cypress-8.9.0.tgz#9c4b732a291dcb2993f9024073c7d8df9fcf5598"
+  integrity sha512-lTEe7ZRCtzuKkn/HYz5DMMbM2irqdHRVbbk6FXhlOgRZILghcwsOyjdzrPbdYcJWDBckjw8KufIcXHGmInIvBw==
   dependencies:
     "@apollo/client" "^3.4.9"
+    "@faker-js/faker" "^10.3.0"
+    compare-versions "^6.1.1"
+    cypress-mailpit "^1.4.0"
     cypress-real-events "^1.11.0"
     graphql "^15.5.0"
     graphql-tag "^2.11.0"
+    yaml "^2.9.1"
 
 "@jahia/eslint-config@^2.1.2":
   version "2.2.0"
@@ -5759,6 +5764,11 @@ y18n@^5.0.5:
 yallist@^3.0.2:
   version "3.1.1"
   resolved "https://registry.yarnpkg.com/yallist/-/yallist-3.1.1.tgz#dbb7daf9bfd8bac9ab45ebf602b8cbad0d5d08fd"
+
+yaml@^2.9.1:
+  version "2.9.1"
+  resolved "https://registry.yarnpkg.com/yaml/-/yaml-2.9.1.tgz#c16233fb31944e705cfefaff38795587f57588ce"
+  integrity sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==
 
 yargs-parser@^18.1.2:
   version "18.1.3"
