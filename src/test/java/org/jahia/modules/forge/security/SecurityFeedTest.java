@@ -50,7 +50,6 @@ class SecurityFeedTest {
 
     private JCRTemplate jcrTemplate;
     private JCRSessionWrapper editSession;
-    private PublicationCheck publicationCheck;
     private JCRNodeWrapper repository;
     private QueryManagerWrapper queryManager;
     private QueryResultWrapper queryResult;
@@ -60,7 +59,6 @@ class SecurityFeedTest {
     void setUp() throws Exception {
         jcrTemplate = mock(JCRTemplate.class);
         editSession = mock(JCRSessionWrapper.class);
-        publicationCheck = mock(PublicationCheck.class);
         when(jcrTemplate.doExecuteWithSystemSessionAsUser(isNull(), eq("default"), eq(Locale.ENGLISH), any()))
                 .thenAnswer(inv -> inv.<JCRCallback<?>>getArgument(3).doInJCR(editSession));
         when(editSession.getNode(anyString())).thenThrow(new PathNotFoundException());
@@ -85,7 +83,7 @@ class SecurityFeedTest {
     }
 
     private JsonNode build() throws Exception {
-        return JSON.readTree(new SecurityFeed(jcrTemplate, publicationCheck).build(repository));
+        return JSON.readTree(new SecurityFeed(jcrTemplate).build(repository));
     }
 
     // ---------------------------------------------------------------- advisories
@@ -121,7 +119,7 @@ class SecurityFeedTest {
         when(advisory.hasProperty("publishedDate")).thenReturn(true);
         when(advisory.getProperty("publishedDate")).thenReturn(date);
         advisoriesFolder(advisory);
-        when(publicationCheck.isFullyPublished(advisory)).thenReturn(true);
+        booleanProperty(advisory, "published", true);
 
         JsonNode a = build().get("advisories").get(0);
 
@@ -145,13 +143,13 @@ class SecurityFeedTest {
     }
 
     @Test
-    @DisplayName("an advisory that is not fully published (draft, modified, live-only) is not emitted")
+    @DisplayName("an advisory whose published box is not checked is not emitted")
     void unpublishedAdvisoryIsSkipped() throws Exception {
         JCRNodeWrapper draft = advisory("draft", "JSA-2026-0012", "critical", "jahia-core@8.2.3.8");
         JCRNodeWrapper published = advisory("pub", "JSA-2026-0013", "low", "jcontent@3.8.2");
         advisoriesFolder(draft, published);
-        when(publicationCheck.isFullyPublished(draft)).thenReturn(false);
-        when(publicationCheck.isFullyPublished(published)).thenReturn(true);
+        booleanProperty(draft, "published", false);
+        booleanProperty(published, "published", true);
 
         JsonNode advisories = build().get("advisories");
 
@@ -159,11 +157,31 @@ class SecurityFeedTest {
     }
 
     @Test
+    @DisplayName("an advisory with no published property (created before the box existed) is not emitted")
+    void missingPublishedPropertyIsSkipped() throws Exception {
+        JCRNodeWrapper advisory = advisory("old", "JSA-2026-0018", "low", "jcontent@3.8.2");
+        advisoriesFolder(advisory);
+
+        assertThat(build().get("advisories")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a published advisory marked for deletion is no longer emitted")
+    void markedForDeletionIsSkipped() throws Exception {
+        JCRNodeWrapper advisory = advisory("gone", "JSA-2026-0019", "high", "jcontent@3.8.2");
+        booleanProperty(advisory, "published", true);
+        when(advisory.isNodeType("jmix:markedForDeletion")).thenReturn(true);
+        advisoriesFolder(advisory);
+
+        assertThat(build().get("advisories")).isEmpty();
+    }
+
+    @Test
     @DisplayName("optional fields are omitted, not emitted as null or empty strings")
     void optionalFieldsOmitted() throws Exception {
         JCRNodeWrapper advisory = advisory("min", "CVE-2026-9999", "medium", "jcontent@3.8.2");
         advisoriesFolder(advisory);
-        when(publicationCheck.isFullyPublished(advisory)).thenReturn(true);
+        booleanProperty(advisory, "published", true);
 
         JsonNode a = build().get("advisories").get(0);
 
@@ -180,7 +198,7 @@ class SecurityFeedTest {
         JCRNodeWrapper advisory = advisory("bad", "JSA-2026-0014", "high", "jcontent@3.8.2", "jahia-core@8.2..3");
         when(advisory.getPath()).thenReturn(ADVISORIES + "/bad");
         advisoriesFolder(advisory);
-        when(publicationCheck.isFullyPublished(advisory)).thenReturn(true);
+        booleanProperty(advisory, "published", true);
 
         assertThatThrownBy(this::build).isInstanceOf(RepositoryException.class)
                 .hasMessageContaining(ADVISORIES + "/bad").hasMessageContaining("fixedIn");
@@ -191,7 +209,7 @@ class SecurityFeedTest {
     void noFixedInFailsLoud() throws Exception {
         JCRNodeWrapper advisory = advisory("empty", "JSA-2026-0016", "high");
         advisoriesFolder(advisory);
-        when(publicationCheck.isFullyPublished(advisory)).thenReturn(true);
+        booleanProperty(advisory, "published", true);
 
         assertThatThrownBy(this::build).isInstanceOf(RepositoryException.class).hasMessageContaining("fixedIn");
     }
@@ -201,17 +219,17 @@ class SecurityFeedTest {
     void unknownSeverityFailsLoud() throws Exception {
         JCRNodeWrapper advisory = advisory("sev", "JSA-2026-0015", "urgent", "jcontent@3.8.2");
         advisoriesFolder(advisory);
-        when(publicationCheck.isFullyPublished(advisory)).thenReturn(true);
+        booleanProperty(advisory, "published", true);
 
         assertThatThrownBy(this::build).isInstanceOf(RepositoryException.class).hasMessageContaining("severity");
     }
 
     @Test
-    @DisplayName("an invalid advisory that is NOT published is ignored, not an error")
+    @DisplayName("an invalid advisory whose published box is not checked is ignored, not an error")
     void invalidDraftIgnored() throws Exception {
         JCRNodeWrapper advisory = advisory("draft", "JSA-2026-0017", "urgent", "nonsense");
         advisoriesFolder(advisory);
-        when(publicationCheck.isFullyPublished(advisory)).thenReturn(false);
+        booleanProperty(advisory, "published", false);
 
         assertThat(build().get("advisories")).isEmpty();
     }

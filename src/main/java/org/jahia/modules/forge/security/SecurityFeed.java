@@ -36,10 +36,11 @@ import java.util.TimeZone;
  * <p>Two sources, two trust levels:
  * <ul>
  *   <li>{@code advisories}: {@code jnt:forgeSecurityAdvisory} nodes under
- *       {@code /sites/<site>/contents/security-advisories}, read from the EDIT workspace with a system
- *       session and emitted only when fully published. The folder's ACL keeps store developers out
- *       (repository.xml), and reading the edit workspace is a second barrier: store developers hold
- *       {@code jcr:write_live} on the rest of the site, and nothing written in live is read here.</li>
+ *       {@code /sites/<site>/contents/security-advisories} (created by the jahia-store-template site import),
+ *       read from the EDIT workspace with a system session, and listed when their {@code published} box is
+ *       checked. Jahia publication plays no part, and live is never read: store developers hold
+ *       {@code jcr:write_live} on the whole site but no edit-workspace write, so they cannot create, change or
+ *       hide an advisory, while store and site administrators can. Edits apply at once.</li>
  *   <li>{@code flaggedVersions}: module versions whose owner set {@code securityFix}, read from the LIVE
  *       workspace in the caller's own session, with the visibility rules of {@code moduleList.json}
  *       (published modules, published versions). Any store developer can set these flags, so clients must
@@ -61,12 +62,12 @@ public final class SecurityFeed {
     private static final String MODULE_TYPE = "jnt:forgeModule";
     private static final String PUBLISHED = "published";
 
-    private final JCRTemplate jcrTemplate;
-    private final PublicationCheck publicationCheck;
+    private static final String MARKED_FOR_DELETION = "jmix:markedForDeletion";
 
-    public SecurityFeed(JCRTemplate jcrTemplate, PublicationCheck publicationCheck) {
+    private final JCRTemplate jcrTemplate;
+
+    public SecurityFeed(JCRTemplate jcrTemplate) {
         this.jcrTemplate = jcrTemplate;
-        this.publicationCheck = publicationCheck;
     }
 
     /**
@@ -77,7 +78,7 @@ public final class SecurityFeed {
      * @throws RepositoryException when the repository cannot be read or a published advisory is invalid
      */
     public static String render(JCRNodeWrapper repositoryNode) throws RepositoryException {
-        return new SecurityFeed(JCRTemplate.getInstance(), new JahiaPublicationCheck()).build(repositoryNode);
+        return new SecurityFeed(JCRTemplate.getInstance()).build(repositoryNode);
     }
 
     /**
@@ -120,7 +121,7 @@ public final class SecurityFeed {
         JCRNodeIteratorWrapper children = folder.getNodes();
         while (children.hasNext()) {
             JCRNodeWrapper child = (JCRNodeWrapper) children.nextNode();
-            if (child.isNodeType(ADVISORY_TYPE) && publicationCheck.isFullyPublished(child)) {
+            if (child.isNodeType(ADVISORY_TYPE) && bool(child, PUBLISHED) && !child.isNodeType(MARKED_FOR_DELETION)) {
                 advisories.add(toAdvisory(child));
             }
         }

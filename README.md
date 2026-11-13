@@ -18,13 +18,12 @@ Its website and in-site administration UI are provided by the sibling
 `/contents/modules-repository.securityUpdates.json` tells Jahia instances which updates fix security
 issues. It sits next to `moduleList.json`, which it does not change.
 
-- **Advisories** (`advisories`): a site administrator of the store creates a *Security advisory* in
-  the site's `contents/security-advisories` folder in jContent, then publishes it.
-  - Only the store site's administrators (and `root`) can write in that folder. It does not inherit the
-    site ACL, because store developers hold `jcr:write_live` on the rest of the site.
-  - Customers see an advisory only once it is published with no pending change, in every language of
-    the site. Editing a published advisory withdraws it from the feed until you publish it again.
-  - The feed reads advisories from the edit workspace.
+- **Advisories** (`advisories`): a store or site administrator creates a *Security advisory* in the
+  site's `contents/security-advisories` folder in jContent, and checks its **Published** box.
+  - The feed lists an advisory as soon as its box is checked; Jahia publication plays no part.
+    Edits apply at once, and an advisory leaves the feed only when you uncheck the box or delete it.
+  - Store administrators and site administrators can write advisories. Store developers cannot:
+    their role only writes the live workspace, and the feed reads advisories from the edit workspace.
   - `advisoryId`: `JSA-YYYY-NNNN`, a CVE or a GHSA identifier.
   - `severity`: `low`, `medium`, `high` or `critical`.
   - `fixedIn`: one value per fixed component and maintained line, written

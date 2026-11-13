@@ -149,10 +149,10 @@
 
 [jnt:forgeUrl] > jnt:content, jmix:siteComponent, jmix:studioOnly
 
-// A security advisory published by the store's security team (Jahia Security Advisory, CVE or GHSA).
-// Authored in the EDIT workspace and published with Jahia's publication. The security-advisories folder
-// does not inherit the site ACL (store developers hold jcr:write_live on the rest of the site), and the
-// securityUpdates feed reads the edit workspace, emitting only fully published advisories.
+// A security advisory written by the store's security team (Jahia Security Advisory, CVE or GHSA).
+// The securityUpdates feed reads advisories from the EDIT workspace and lists those whose `published`
+// box is checked; Jahia publication plays no part. Store developers hold jcr:write_live only, so they
+// cannot create or change advisories; store and site administrators can. Edits apply at once.
 // fixedIn: one entry per fixed component and line, "[groupId:]component@version", for example
 // "graphql-dxm-provider@3.10.0", "org.jahia.modules:graphql-dxm-provider@2.24.0" or "jahia-core@8.2.3.7".
 [jnt:forgeSecurityAdvisory] > jnt:content, mix:title, jmix:forge
@@ -163,4 +163,5 @@
  - advisoryUrl (string) < '^https://[^ ]+$'
  - publishedDate (date)
  - summary (string, textarea) i18n
+ - published (boolean) = false autocreated
  - fixedIn (string) mandatory multiple < '^(?!.*[.][.])([A-Za-z0-9_.-]+:)?[A-Za-z0-9_.-]+@[0-9][A-Za-z0-9_.-]*$'

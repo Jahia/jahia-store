@@ -78,25 +78,6 @@
                                           text="Service Pack"/>
                     </simple-text-1>
                 </modules-release-type>
-                <!-- Security advisories reach every Jahia instance that reads securityUpdates.json. The folder
-                     does NOT inherit the site ACL: store-developer holds jcr:write_live on the whole site, and
-                     could otherwise create a live node named like a future advisory, which makes its
-                     publication fail with a conflict. Only the site administrators (and root) manage it.
-                     The feed reads it with a system session, so no reader grant is needed. -->
-                <security-advisories jcr:mixinTypes="jmix:accessControlled"
-                                     jcr:primaryType="jnt:contentFolder">
-                    <j:acl j:inherit="false" jcr:primaryType="jnt:acl">
-                        <GRANT_g_site-administrators j:aceType="GRANT"
-                                                     j:principal="g:site-administrators"
-                                                     j:protected="false"
-                                                     j:roles="site-administrator"
-                                                     jcr:primaryType="jnt:ace"/>
-                    </j:acl>
-                    <j:translation_en jcr:language="en"
-                                      jcr:mixinTypes="mix:title"
-                                      jcr:primaryType="jnt:translation"
-                                      jcr:title="Security advisories"/>
-                </security-advisories>
             </contents>
             <templates j:rootTemplatePath="/base" jcr:primaryType="jnt:templatesFolder">
                 <files jcr:primaryType="jnt:folder"/>
