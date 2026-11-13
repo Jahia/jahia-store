@@ -8,12 +8,16 @@ import org.jahia.services.content.JCRTemplate;
 import org.jahia.services.content.JCRValueWrapper;
 import org.jahia.services.content.RBACUtils;
 import org.jahia.utils.security.AccessManagerUtils;
+import org.osgi.framework.BundleContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.jcr.RepositoryException;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.Arrays;
 
 /**
@@ -35,8 +39,8 @@ import java.util.Arrays;
  * {@code j:permissions} references ({@code AccessManagerUtils.getPrivileges}): the migration edits the list
  * the role actually uses, then flushes Jahia's role-privilege caches.
  *
- * <p>Idempotent, run at activation in a system session; never fails the activation: an error is logged with
- * the manual fix.
+ * <p>Idempotent, run at activation in a system session, once per module version (see
+ * {@link #activate(BundleContext)}); never fails the activation: an error is logged with the manual fix.
  */
 @Component(immediate = true)
 public class StoreAdministratorPublishMigration {
@@ -52,6 +56,7 @@ public class StoreAdministratorPublishMigration {
     private static final String PERMISSION_PATH = "/permissions/repository-permissions/" + PERMISSION;
     private static final String PERMISSION_NAMES = "j:permissionNames";
     private static final String PERMISSIONS = "j:permissions";
+    private static final String DONE_PREFIX = "store-administrator-publish-done-";
 
     /** What the migration did. */
     enum Outcome { ADDED, ALREADY_PRESENT, NO_ROLE, NO_PERMISSION_LIST }
@@ -66,8 +71,26 @@ public class StoreAdministratorPublishMigration {
         this.jcrTemplate = jcrTemplate;
     }
 
+    /**
+     * Runs once per module version, like the {@code roles.xml} import: a {@code publish} an administrator
+     * removed afterwards is not put back at the next start. Done is recorded in the bundle's data area; a
+     * role not imported yet, or a failure, is not recorded, so the next start tries again.
+     *
+     * @param context the bundle context, for the data area and the module version
+     */
     @Activate
-    public void activate() {
+    public void activate(BundleContext context) {
+        File done = context.getDataFile(DONE_PREFIX + context.getBundle().getVersion());
+        if (done != null && done.exists()) {
+            return;
+        }
+        Outcome outcome = migrate();
+        if (done != null && outcome != null && outcome != Outcome.NO_ROLE) {
+            markDone(done);
+        }
+    }
+
+    private Outcome migrate() {
         try {
             Outcome outcome = template().doExecuteWithSystemSessionAsUser(null, Constants.EDIT_WORKSPACE, null,
                     StoreAdministratorPublishMigration::grantPublish);
@@ -78,10 +101,21 @@ public class StoreAdministratorPublishMigration {
                 LOGGER.warn("Role {} lists no permission; {} not added. Add it by hand in the role settings if"
                         + " store administrators must publish security advisories.", ROLE_PATH, PERMISSION);
             }
+            return outcome;
         } catch (RepositoryException | RuntimeException e) {
             LOGGER.error("Could not add the {} permission to role {}: store administrators cannot publish"
                     + " security advisories. Add the {} permission to the role by hand (Administration > Roles"
                     + " and permissions > {}).", PERMISSION, ROLE_NAME, PERMISSION, ROLE_NAME, e);
+            return null;
+        }
+    }
+
+    private static void markDone(File done) {
+        try {
+            Files.createFile(done.toPath());
+        } catch (IOException e) {
+            LOGGER.warn("Cannot record that the {} migration of role {} ran; it will run again at the next start",
+                    PERMISSION, ROLE_NAME, e);
         }
     }
 

@@ -12,9 +12,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.MockedStatic;
+import org.osgi.framework.Bundle;
+import org.osgi.framework.BundleContext;
+import org.osgi.framework.Version;
 
 import javax.jcr.RepositoryException;
+import java.io.File;
+import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -44,6 +50,10 @@ class StoreAdministratorPublishMigrationTest {
     private StoreAdministratorPublishMigration migration;
     private MockedStatic<RBACUtils> rbac;
     private MockedStatic<AccessManagerUtils> accessManager;
+    private BundleContext context;
+
+    @TempDir
+    Path dataArea;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -55,6 +65,11 @@ class StoreAdministratorPublishMigrationTest {
         when(session.nodeExists(ROLE)).thenReturn(true);
         when(session.getNode(ROLE)).thenReturn(role);
         migration = new StoreAdministratorPublishMigration(jcrTemplate);
+        context = mock(BundleContext.class);
+        Bundle bundle = mock(Bundle.class);
+        when(context.getBundle()).thenReturn(bundle);
+        when(bundle.getVersion()).thenReturn(new Version("5.2.0"));
+        when(context.getDataFile(anyString())).thenAnswer(inv -> dataArea.resolve(inv.<String>getArgument(0)).toFile());
         rbac = mockStatic(RBACUtils.class);
         accessManager = mockStatic(AccessManagerUtils.class);
     }
@@ -70,7 +85,7 @@ class StoreAdministratorPublishMigrationTest {
     void addsPublishToPermissionNames() throws Exception {
         names("jahiaForgeModerateModule", "jahiaForgeUploadModule", "jcr:all_live", "jcr:all_default");
 
-        migration.activate();
+        migration.activate(context);
 
         verify(role).setProperty(NAMES, new String[]{
                 "jahiaForgeModerateModule", "jahiaForgeUploadModule", "jcr:all_live", "jcr:all_default", "publish"});
@@ -83,7 +98,7 @@ class StoreAdministratorPublishMigrationTest {
     void alreadyPresent() throws Exception {
         names("jcr:all_default", "publish");
 
-        migration.activate();
+        migration.activate(context);
 
         verify(role, never()).setProperty(anyString(), any(String[].class));
         verify(session, never()).save();
@@ -96,7 +111,7 @@ class StoreAdministratorPublishMigrationTest {
         rbac.when(() -> RBACUtils.grantPermissionToRole("/permissions/repository-permissions/publish", ROLE, session))
                 .thenReturn(true);
 
-        migration.activate();
+        migration.activate(context);
 
         rbac.verify(() -> RBACUtils.grantPermissionToRole("/permissions/repository-permissions/publish", ROLE, session));
         verify(session).save();
@@ -108,7 +123,7 @@ class StoreAdministratorPublishMigrationTest {
         when(role.hasProperty("j:permissions")).thenReturn(true);
         rbac.when(() -> RBACUtils.grantPermissionToRole(anyString(), anyString(), any())).thenReturn(false);
 
-        migration.activate();
+        migration.activate(context);
 
         verify(session, never()).save();
     }
@@ -117,9 +132,9 @@ class StoreAdministratorPublishMigrationTest {
     @DisplayName("no role yet (fresh install before the import), or a role with no permission list: nothing written")
     void nothingToMigrate() throws Exception {
         when(role.hasProperty(anyString())).thenReturn(false);
-        migration.activate();
+        migration.activate(context);
         when(session.nodeExists(ROLE)).thenReturn(false);
-        migration.activate();
+        migration.activate(context);
 
         verify(role, never()).setProperty(anyString(), any(String[].class));
         verify(session, never()).save();
@@ -132,8 +147,45 @@ class StoreAdministratorPublishMigrationTest {
         names("jcr:all_default");
         when(role.setProperty(anyString(), any(String[].class))).thenThrow(new RepositoryException("boom"));
 
-        assertThatCode(() -> migration.activate()).doesNotThrowAnyException();
+        assertThatCode(() -> migration.activate(context)).doesNotThrowAnyException();
         verify(session, never()).save();
+    }
+
+    @Test
+    @DisplayName("runs once per module version: publish removed by an administrator afterwards is not re-added")
+    void runsOncePerModuleVersion() throws Exception {
+        names("jcr:all_default");
+        migration.activate(context);
+        verify(session).save();
+
+        names("jcr:all_default");
+        migration.activate(context);
+
+        verify(role, org.mockito.Mockito.times(1)).setProperty(anyString(), any(String[].class));
+    }
+
+    @Test
+    @DisplayName("a role not imported yet is not marked done: the next start applies the migration")
+    void noRoleIsRetried() throws Exception {
+        when(session.nodeExists(ROLE)).thenReturn(false);
+        migration.activate(context);
+
+        when(session.nodeExists(ROLE)).thenReturn(true);
+        names("jcr:all_default");
+        migration.activate(context);
+
+        verify(session).save();
+    }
+
+    @Test
+    @DisplayName("a failed migration is not marked done")
+    void failureIsRetried() throws Exception {
+        names("jcr:all_default");
+        when(role.setProperty(anyString(), any(String[].class))).thenThrow(new RepositoryException("boom"));
+        migration.activate(context);
+
+        File[] marks = dataArea.toFile().listFiles();
+        assertThat(marks).isEmpty();
     }
 
     @Test
