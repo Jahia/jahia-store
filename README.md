@@ -24,9 +24,9 @@ issues. It sits next to `moduleList.json`, which it does not change.
   - The feed reads advisories from the live workspace. It lists an advisory only when it is published
     in Jahia **and** its box is checked in the published version. An edit changes nothing until you
     publish the advisory again. To withdraw an advisory, unpublish it, or uncheck the box and publish.
-  - Publishing needs Jahia's `publish` permission. The `store-administrator` role does not include it,
-    so a store administrator can write advisories but someone with `publish` on the site (a site
-    administrator, for example) must publish them.
+  - Publishing needs Jahia's `publish` permission. Since 5.2.0 the `store-administrator` role includes
+    it, so store administrators publish advisories themselves. **This widens the role: a store
+    administrator can now publish any content of the store site that they can edit.**
   - Store developers cannot create, change or delete anything in the advisories folder, in the edit
     or the live workspace. The module puts a DENY of the `store-developer` role on the folder for each
     user and group that has this role on the site. Store developers keep their write access in the rest

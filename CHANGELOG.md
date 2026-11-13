@@ -2,6 +2,12 @@
 
 ## 5.2.0 (unreleased)
 
+> **For administrators: the `store-administrator` role now has Jahia's `publish` permission.** Store
+> administrators can publish any content of the store site that they can edit, not only security
+> advisories. Before you upgrade, check who holds this role. If you do not want this, remove `publish`
+> from the role in *Administration > Roles and permissions* after the upgrade; store administrators then
+> need someone else, a site administrator for example, to publish their advisories.
+
 ### Added
 
 - **Security updates feed.** `/contents/modules-repository.securityUpdates.json` lists the security
@@ -11,8 +17,13 @@
     `contents/security-advisories` folder by store or site administrators. An advisory is listed
     once it is published in Jahia with its *Published in the security feed* box checked. Edits are
     listed when the advisory is published again. Unpublish it, or uncheck the box and publish, to
-    withdraw it. Publishing needs Jahia's `publish` permission, which `store-administrator` does
-    not include.
+    withdraw it.
+  - The `store-administrator` role gets Jahia's `publish` permission, so that store administrators
+    can publish the advisories they write. New installations get it from the module's roles. On an
+    existing installation, the module adds it to `/roles/store-administrator` when it starts and logs
+    `Added the publish permission to role store-administrator`. If it logs
+    `Could not add the publish permission to role store-administrator` instead, add `publish` to the
+    role by hand.
   - Store developers cannot create, change or delete advisories, in the edit or the live workspace:
     the module denies the `store-developer` role on the advisories folder to each user and group
     that holds it on the site, and keeps this up to date. Store developers keep their write access
