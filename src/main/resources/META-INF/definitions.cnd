@@ -155,6 +155,9 @@
 // cannot create or change advisories; store and site administrators can. Edits apply at once.
 // fixedIn: one entry per fixed component and line, "[groupId:]component@version", for example
 // "graphql-dxm-provider@3.10.0", "org.jahia.modules:graphql-dxm-provider@2.24.0" or "jahia-core@8.2.3.7".
+// introducedIn (optional): the first version of a component that has the flaw, same format, at most one
+// value per component, naming a component of fixedIn (with no groupId or the same one). Versions below
+// it are not affected. The feed checks these cross-value rules; the constraint checks the format only.
 [jnt:forgeSecurityAdvisory] > jnt:content, mix:title, jmix:forge
  - advisoryId (string) mandatory < '^(JSA-[0-9]{4}-[0-9]{4}|CVE-[0-9]{4}-[0-9]{4,}|GHSA(-[23456789cfghjmpqrvwx]{4}){3})$'
  - severity (string, choicelist[resourceBundle]) mandatory < 'low', 'medium', 'high', 'critical'
@@ -165,3 +168,4 @@
  - summary (string, textarea) i18n
  - published (boolean) = false autocreated
  - fixedIn (string) mandatory multiple < '^(?!.*[.][.])([A-Za-z0-9_.-]+:)?[A-Za-z0-9_.-]+@[0-9][A-Za-z0-9_.-]*$'
+ - introducedIn (string) multiple < '^(?!.*[.][.])([A-Za-z0-9_.-]+:)?[A-Za-z0-9_.-]+@[0-9][A-Za-z0-9_.-]*$'

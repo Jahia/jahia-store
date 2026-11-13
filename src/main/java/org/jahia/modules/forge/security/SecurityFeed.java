@@ -65,6 +65,8 @@ public final class SecurityFeed {
     private static final String JAHIA_PUBLISHED = Constants.PUBLISHED;
 
     private static final String MARKED_FOR_DELETION = "jmix:markedForDeletion";
+    private static final String FIXED_IN = "fixedIn";
+    private static final String INTRODUCED_IN = "introducedIn";
 
     private final JCRTemplate jcrTemplate;
 
@@ -161,10 +163,13 @@ public final class SecurityFeed {
         return advisory;
     }
 
-    /** Groups the {@code fixedIn} entries by component, keeping their order. Any invalid entry is an error. */
+    /**
+     * Groups the {@code fixedIn} entries by component, keeping their order, and adds each component's
+     * {@code introducedIn} version. Any invalid entry is an error.
+     */
     private static List<Map<String, Object>> fixes(JCRNodeWrapper node) throws RepositoryException {
         Map<String, FixGroup> byComponent = new LinkedHashMap<>();
-        for (String value : strings(node, "fixedIn")) {
+        for (String value : strings(node, FIXED_IN)) {
             Optional<FixedInEntry> parsed = FixedInEntry.parse(value);
             if (!parsed.isPresent()) {
                 throw invalid(node, "invalid fixedIn value");
@@ -175,6 +180,7 @@ public final class SecurityFeed {
         if (byComponent.isEmpty()) {
             throw invalid(node, "no fixedIn value");
         }
+        addIntroducedVersions(node, byComponent);
         List<Map<String, Object>> fixes = new ArrayList<>();
         for (FixGroup group : byComponent.values()) {
             fixes.add(group.toJson());
@@ -182,15 +188,41 @@ public final class SecurityFeed {
         return fixes;
     }
 
+    /**
+     * Sets the version that introduced the flaw, per component, from the optional {@code introducedIn}
+     * values. A value is invalid when it is malformed, names a component that has no {@code fixedIn}
+     * value, gives a groupId other than the one of that component's {@code fixedIn} values (including
+     * when those give none), or is a second value for the same component.
+     */
+    private static void addIntroducedVersions(JCRNodeWrapper node, Map<String, FixGroup> byComponent)
+            throws RepositoryException {
+        for (String value : strings(node, INTRODUCED_IN)) {
+            FixedInEntry entry = FixedInEntry.parse(value)
+                    .orElseThrow(() -> invalid(node, "invalid introducedIn value"));
+            FixGroup group = byComponent.get(entry.getComponent());
+            if (group == null) {
+                throw invalid(node, "introducedIn names " + entry.getComponent() + ", which has no fixedIn value");
+            }
+            if (group.introducedVersion != null) {
+                throw invalid(node, "more than one introducedIn value for " + group.component);
+            }
+            if (entry.getGroupId() != null && !entry.getGroupId().equals(group.groupId)) {
+                throw invalid(node, "the introducedIn groupId of " + group.component + " differs from its fixedIn groupId");
+            }
+            group.introducedVersion = entry.getVersion();
+        }
+    }
+
     private static RepositoryException invalid(JCRNodeWrapper node, String reason) {
         return new RepositoryException("Published security advisory " + node.getPath() + " is invalid: " + reason);
     }
 
-    /** The fixed versions of one component, one per maintained line. */
+    /** The fixed versions of one component, one per maintained line, and the version that introduced the flaw. */
     private static final class FixGroup {
         private final String component;
         private final List<String> fixedVersions = new ArrayList<>();
         private String groupId;
+        private String introducedVersion;
 
         FixGroup(String component) {
             this.component = component;
@@ -208,6 +240,7 @@ public final class SecurityFeed {
             json.put("component", component);
             putIfPresent(json, "groupId", groupId);
             json.put("fixedVersions", fixedVersions);
+            putIfPresent(json, "introducedVersion", introducedVersion);
             return json;
         }
     }

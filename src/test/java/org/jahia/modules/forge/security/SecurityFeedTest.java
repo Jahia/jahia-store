@@ -17,6 +17,9 @@ import org.jahia.services.content.decorator.JCRSiteNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 
 import javax.jcr.ItemNotFoundException;
@@ -34,6 +37,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -222,6 +226,106 @@ class SecurityFeedTest {
         booleanProperty(advisory, "published", true);
 
         assertThatThrownBy(this::build).isInstanceOf(RepositoryException.class).hasMessageContaining("fixedIn");
+    }
+
+    // ---------------------------------------------------------------- introducedIn
+
+    @Test
+    @DisplayName("introducedIn sets introducedVersion on its component only")
+    void introducedVersionOnItsComponent() throws Exception {
+        JCRNodeWrapper advisory = publishedAdvisory("intro", "graphql-dxm-provider@3.10.0",
+                "org.jahia.modules:graphql-dxm-provider@2.24.0", "jahia-core@8.2.3.7");
+        multiProperty(advisory, "introducedIn", "graphql-dxm-provider@2.0.0");
+
+        JsonNode fixes = build().get("advisories").get(0).get("fixes");
+
+        assertThat(fixes.get(0).get("component").asText()).isEqualTo("graphql-dxm-provider");
+        assertThat(fixes.get(0).get("introducedVersion").asText()).isEqualTo("2.0.0");
+        assertThat(fixes.get(0).get("fixedVersions")).extracting(JsonNode::asText).containsExactly("3.10.0", "2.24.0");
+        assertThat(fixes.get(1).get("component").asText()).isEqualTo("jahia-core");
+        assertThat(fixes.get(1).has("introducedVersion")).isFalse();
+    }
+
+    @Test
+    @DisplayName("one introducedIn value per component: each component gets its own introducedVersion")
+    void introducedVersionPerComponent() throws Exception {
+        JCRNodeWrapper advisory = publishedAdvisory("intro2", "graphql-dxm-provider@3.10.0", "jahia-core@8.2.3.7");
+        multiProperty(advisory, "introducedIn", "jahia-core@8.1.0.0", "graphql-dxm-provider@2.0.0");
+
+        JsonNode fixes = build().get("advisories").get(0).get("fixes");
+
+        assertThat(fixes.get(0).get("introducedVersion").asText()).isEqualTo("2.0.0");
+        assertThat(fixes.get(1).get("introducedVersion").asText()).isEqualTo("8.1.0.0");
+    }
+
+    @Test
+    @DisplayName("no introducedIn -> no introducedVersion key in any fix, never null")
+    void introducedVersionAbsentWhenNotSet() throws Exception {
+        publishedAdvisory("nointro", "graphql-dxm-provider@3.10.0", "jahia-core@8.2.3.7");
+
+        JsonNode fixes = build().get("advisories").get(0).get("fixes");
+
+        assertThat(fixes).hasSize(2).allSatisfy(fix -> assertThat(fix.has("introducedVersion")).isFalse());
+    }
+
+    @Test
+    @DisplayName("introducedIn with the groupId of the component's fixedIn values is accepted")
+    void introducedInWithSameGroupId() throws Exception {
+        JCRNodeWrapper advisory = publishedAdvisory("intro-gid", "graphql-dxm-provider@3.10.0",
+                "org.jahia.modules:graphql-dxm-provider@2.24.0");
+        multiProperty(advisory, "introducedIn", "org.jahia.modules:graphql-dxm-provider@2.0.0");
+
+        JsonNode fix = build().get("advisories").get(0).get("fixes").get(0);
+
+        assertThat(fix.get("groupId").asText()).isEqualTo("org.jahia.modules");
+        assertThat(fix.get("introducedVersion").asText()).isEqualTo("2.0.0");
+    }
+
+    @Test
+    @DisplayName("introducedIn with no groupId matches a component whose fixedIn values give one")
+    void introducedInWithoutGroupId() throws Exception {
+        JCRNodeWrapper advisory = publishedAdvisory("intro-nogid", "org.jahia.modules:graphql-dxm-provider@2.24.0");
+        multiProperty(advisory, "introducedIn", "graphql-dxm-provider@2.0.0");
+
+        JsonNode fix = build().get("advisories").get(0).get("fixes").get(0);
+
+        assertThat(fix.get("groupId").asText()).isEqualTo("org.jahia.modules");
+        assertThat(fix.get("introducedVersion").asText()).isEqualTo("2.0.0");
+    }
+
+    static Stream<Arguments> invalidIntroducedIn() {
+        return Stream.of(
+                Arguments.of("malformed", new String[]{"graphql-dxm-provider@2..0"}),
+                Arguments.of("no version", new String[]{"graphql-dxm-provider"}),
+                Arguments.of("component absent from fixedIn", new String[]{"jcontent@3.0.0"}),
+                Arguments.of("groupId other than the fixedIn one", new String[]{"org.other:graphql-dxm-provider@2.0.0"}),
+                Arguments.of("groupId where fixedIn gives none", new String[]{"org.jahia:jahia-core@8.1.0.0"}),
+                Arguments.of("second value for a component",
+                        new String[]{"graphql-dxm-provider@2.0.0", "graphql-dxm-provider@2.1.0"}),
+                Arguments.of("one valid and one invalid value", new String[]{"jahia-core@8.1.0.0", "jcontent@3.0.0"}));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("invalidIntroducedIn")
+    @DisplayName("a published advisory with an invalid introducedIn value fails the feed (never a silent drop)")
+    void invalidIntroducedInFailsLoud(String reason, String[] introducedIn) throws Exception {
+        JCRNodeWrapper advisory = publishedAdvisory("bad-intro", "graphql-dxm-provider@3.10.0",
+                "org.jahia.modules:graphql-dxm-provider@2.24.0", "jahia-core@8.2.3.7");
+        multiProperty(advisory, "introducedIn", introducedIn);
+
+        assertThatThrownBy(this::build).as(reason).isInstanceOf(RepositoryException.class)
+                .hasMessageContaining(ADVISORIES + "/bad-intro").hasMessageContaining("introducedIn");
+    }
+
+    @Test
+    @DisplayName("an invalid introducedIn on an advisory whose box is not checked is ignored, not an error")
+    void invalidIntroducedInOnDraftIgnored() throws Exception {
+        JCRNodeWrapper advisory = advisory("draft-intro", "JSA-2026-0033", "high", "jcontent@3.8.2");
+        multiProperty(advisory, "introducedIn", "jahia-core@8.1.0.0");
+        booleanProperty(advisory, "published", false);
+        advisoriesFolder(advisory);
+
+        assertThat(build().get("advisories")).isEmpty();
     }
 
     @Test
@@ -489,6 +593,14 @@ class SecurityFeedTest {
         stringProperty(node, "advisoryId", id);
         stringProperty(node, "severity", severity);
         multiProperty(node, "fixedIn", fixedIn);
+        return node;
+    }
+
+    /** A listed advisory (box checked), alone in the advisories folder. */
+    private JCRNodeWrapper publishedAdvisory(String name, String... fixedIn) throws Exception {
+        JCRNodeWrapper node = advisory(name, "JSA-2026-0032", "high", fixedIn);
+        booleanProperty(node, "published", true);
+        advisoriesFolder(node);
         return node;
     }
 

@@ -5,10 +5,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * One value of an advisory's {@code fixedIn} property: {@code [groupId:]component@version}, for
- * example {@code graphql-dxm-provider@3.10.0}, {@code org.jahia.modules:graphql-dxm-provider@2.24.0}
- * or {@code jahia-core@8.2.3.7}. The same pattern is enforced by the CND constraint on the property;
- * it is checked again here because the feed must never emit a value a client could misread.
+ * One value of an advisory's {@code fixedIn} or {@code introducedIn} property:
+ * {@code [groupId:]component@version}, for example {@code graphql-dxm-provider@3.10.0},
+ * {@code org.jahia.modules:graphql-dxm-provider@2.24.0} or {@code jahia-core@8.2.3.7}. Both properties
+ * share the format. The same pattern is enforced by the CND constraint on each property; it is checked
+ * again here because the feed must never emit a value a client could misread.
  */
 public final class FixedInEntry {
 
@@ -26,7 +27,7 @@ public final class FixedInEntry {
     }
 
     /**
-     * @param value a raw {@code fixedIn} value
+     * @param value a raw {@code fixedIn} or {@code introducedIn} value
      * @return the parsed entry, or empty when the value is null, blank, malformed or contains "..".
      */
     public static Optional<FixedInEntry> parse(String value) {
@@ -51,7 +52,10 @@ public final class FixedInEntry {
         return component;
     }
 
-    /** @return the first version of the component's line that contains the fix */
+    /**
+     * @return for {@code fixedIn}, the first version of the component's line that contains the fix; for
+     *         {@code introducedIn}, the first version of the component that has the flaw
+     */
     public String getVersion() {
         return version;
     }
