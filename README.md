@@ -24,7 +24,8 @@ issues. It sits next to `moduleList.json`, which it does not change.
     Edits apply at once, and an advisory leaves the feed only when you uncheck the box or delete it.
   - Store administrators and site administrators can write advisories. Store developers cannot:
     their role only writes the live workspace, and the feed reads advisories from the edit workspace.
-  - `advisoryId`: `JSA-YYYY-NNNN`, a CVE or a GHSA identifier.
+  - `advisoryId`: `JSA-YYYY-NNNN`, with an optional numeric suffix (`JSA-2026-0036.1066`), a CVE or a GHSA
+    identifier. The same rule applies to the `securityReferences` of a module version.
   - `severity`: `low`, `medium`, `high` or `critical`.
   - `fixedIn`: one value per fixed component and maintained line, written
     `[groupId:]component@version`. The component is a Store module name, or `jahia-core` for the
