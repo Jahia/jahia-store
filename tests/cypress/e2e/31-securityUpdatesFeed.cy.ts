@@ -30,7 +30,8 @@ import {
  *   - second line of defence: an advisory written directly in live (Jahia's jmix:liveProperties or
  *     j:originWS=live markers) is ignored, even when the writer is allowed to write there (root here);
  *   - the optional introducedIn values (first affected version, one per component of fixedIn) are served
- *     as fixes[].introducedVersion; a malformed value is refused at write time;
+ *     as fixes[].introducedVersion; a malformed value is refused at write time, and a value the CND cannot
+ *     judge (component not in fixedIn) is ignored without taking the feed down;
  *   - owner-flagged versions (securityFix) follow moduleList.json visibility: published modules and
  *     published versions only.
  *
@@ -434,6 +435,23 @@ describe('Security updates feed (securityUpdates.json)', () => {
                 // Control: an advisory without introducedIn has no introducedVersion in any fix.
                 const plain = feed.advisories.find(x => x.id === 'JSA-2026-9001')!;
                 plain.fixes.forEach(fix => expect(fix).to.not.have.property('introducedVersion'));
+            });
+        });
+
+        it('ignores an introducedIn value naming a component absent from fixedIn, and keeps serving the feed', () => {
+            // The CND checks the format only, so this value is accepted at write time and published.
+            errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', 'jsa-2026-9015', [
+                ...advisoryProps('JSA-2026-9015', 'medium', ['jahia-core@8.2.3.7']),
+                {name: 'introducedIn', values: ['jcontent@3.0.0']}
+            ])).should('have.length', 0);
+            publishAdvisory('jsa-2026-9015');
+
+            // The fetch asserts a 200: one bad value must not stop every customer's feed.
+            fetchFeedAnonymously().then(feed => {
+                const a = feed.advisories.find(x => x.id === 'JSA-2026-9015');
+                expect(a, 'advisory JSA-2026-9015 listed').to.not.equal(undefined);
+                expect(a!.fixes).to.deep.equal([{component: 'jahia-core', fixedVersions: ['8.2.3.7']}]);
+                expect(feed.advisories.map(x => x.id)).to.include('JSA-2026-9013');
             });
         });
 

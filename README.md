@@ -52,6 +52,12 @@ issues. It sits next to `moduleList.json`, which it does not change.
     a component listed in `fixedIn`; it may omit the groupId, but when it gives one it must be the
     groupId of that component's `fixedIn` values. Example: `graphql-dxm-provider@2.0.0`, for a flaw
     that exists from 2.0.0 and is fixed in 2.24.0 and 3.10.0: a client that runs 1.4.0 is not affected.
+  - jContent refuses a malformed `introducedIn` value. It cannot check the other rules, so the feed
+    ignores a value that breaks them: a value naming a component that is not in `fixedIn`, a value
+    with another groupId (or with a groupId when `fixedIn` gives none), and every value of a component
+    that has more than one. The component is then served without `introducedVersion`, so clients
+    report every version below its fixes, and the module logs a warning with the advisory path and
+    the reason. The feed is still served.
   - Optional: `cvss`, `cves`, `advisoryUrl`, `publishedDate`, `summary`, `introducedIn`.
 - **Flagged versions** (`flaggedVersions`): a module owner can mark a version as containing
   security fixes (`securityFix`, with an optional `securitySeverity`, `securityReferences` and
@@ -76,7 +82,7 @@ without it, clients treat every version below a fixed version as affected. The f
 additive: `schemaVersion` stays 1 and older clients ignore it.
 
 The view is not cached. When the repository cannot be read, or when a published advisory is not
-valid (a malformed `fixedIn` or `introducedIn` value, or an `introducedIn` value that breaks the rules
+valid (for example a malformed `fixedIn` value; an invalid `introducedIn` value is ignored instead, see
 above), it answers `503` with `{"error": "security feed unavailable"}` rather than a partial or empty
 feed, which would tell every client that nothing needs fixing.
 

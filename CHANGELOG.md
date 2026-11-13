@@ -34,10 +34,12 @@
     component that has the problem, written like `fixedIn` (`[groupId:]component@version`), one
     value per component listed in `fixedIn`. The feed adds it to that component's fix as
     `introducedVersion`, so clients stop reporting the versions below it. Without it, every version
-    below a fixed version counts as affected. The field is optional (`schemaVersion` stays 1). A
-    published advisory whose `introducedIn` is malformed, names a component that is not in `fixedIn`,
-    gives another groupId than `fixedIn`, or has two values for one component makes the feed answer
-    503, as an invalid `fixedIn` does.
+    below a fixed version counts as affected. The field is optional (`schemaVersion` stays 1).
+    jContent refuses a malformed value. A value that names a component not in `fixedIn` or gives
+    another groupId than `fixedIn`, and every value of a component that has more than one, are
+    ignored: that component has no `introducedVersion`, and the module logs a warning with the
+    advisory path and the reason. Unlike an invalid `fixedIn`, an invalid `introducedIn` never stops
+    the feed.
   - New optional properties on module versions: `securityFix`, `securitySeverity`,
     `securityReferences` and `securityNote`.
   - `moduleList.json` is unchanged.

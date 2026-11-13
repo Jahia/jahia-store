@@ -21,10 +21,12 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TimeZone;
 
 /**
@@ -51,6 +53,9 @@ import java.util.TimeZone;
  *
  * <p>Errors fail loud. A repository error, or a published advisory that is not valid, raises an exception
  * and the view answers 503: a feed that silently drops an advisory tells every client "nothing to fix".
+ * The one exception is the optional {@code introducedIn}: an invalid value is ignored for its component
+ * and logged at WARN, so a typo there makes clients over-report (every version below a fix is affected)
+ * instead of stopping the whole feed. The CND cannot enforce its cross-value rules at write time.
  */
 public final class SecurityFeed {
 
@@ -69,9 +74,16 @@ public final class SecurityFeed {
     private static final String INTRODUCED_IN = "introducedIn";
 
     private final JCRTemplate jcrTemplate;
+    private final Logger logger;
 
     public SecurityFeed(JCRTemplate jcrTemplate) {
+        this(jcrTemplate, LOGGER);
+    }
+
+    /** For tests: the logger receives the warnings about ignored {@code introducedIn} values. */
+    SecurityFeed(JCRTemplate jcrTemplate, Logger logger) {
         this.jcrTemplate = jcrTemplate;
+        this.logger = logger;
     }
 
     /**
@@ -118,7 +130,7 @@ public final class SecurityFeed {
         try {
             folder = live.getNode(folderPath);
         } catch (PathNotFoundException e) {
-            LOGGER.info("No published security advisories folder at {}: the feed lists no advisory", folderPath);
+            logger.info("No published security advisories folder at {}: the feed lists no advisory", folderPath);
             return Collections.emptyList();
         }
         List<Map<String, Object>> advisories = new ArrayList<>();
@@ -140,7 +152,7 @@ public final class SecurityFeed {
                 && bool(node, PUBLISHED);
     }
 
-    private static Map<String, Object> toAdvisory(JCRNodeWrapper node) throws RepositoryException {
+    private Map<String, Object> toAdvisory(JCRNodeWrapper node) throws RepositoryException {
         String id = string(node, "advisoryId");
         String severity = string(node, "severity");
         if (id == null || !SEVERITIES.contains(severity)) {
@@ -165,9 +177,10 @@ public final class SecurityFeed {
 
     /**
      * Groups the {@code fixedIn} entries by component, keeping their order, and adds each component's
-     * {@code introducedIn} version. Any invalid entry is an error.
+     * {@code introducedIn} version. Any invalid {@code fixedIn} entry is an error; an invalid
+     * {@code introducedIn} entry is ignored (see {@link #addIntroducedVersions}).
      */
-    private static List<Map<String, Object>> fixes(JCRNodeWrapper node) throws RepositoryException {
+    private List<Map<String, Object>> fixes(JCRNodeWrapper node) throws RepositoryException {
         Map<String, FixGroup> byComponent = new LinkedHashMap<>();
         for (String value : strings(node, FIXED_IN)) {
             Optional<FixedInEntry> parsed = FixedInEntry.parse(value);
@@ -190,27 +203,47 @@ public final class SecurityFeed {
 
     /**
      * Sets the version that introduced the flaw, per component, from the optional {@code introducedIn}
-     * values. A value is invalid when it is malformed, names a component that has no {@code fixedIn}
-     * value, gives a groupId other than the one of that component's {@code fixedIn} values (including
-     * when those give none), or is a second value for the same component.
+     * values. A value is ignored, with one WARN naming the advisory and the reason, when it is malformed,
+     * names a component that has no {@code fixedIn} value, or gives a groupId other than the one of that
+     * component's {@code fixedIn} values (including when those give none). When several values name the
+     * same component, all of them are ignored: the feed does not guess. An ignored value leaves the
+     * component without {@code introducedVersion}, so clients report every version below its fixes.
      */
-    private static void addIntroducedVersions(JCRNodeWrapper node, Map<String, FixGroup> byComponent)
+    private void addIntroducedVersions(JCRNodeWrapper node, Map<String, FixGroup> byComponent)
             throws RepositoryException {
+        Map<String, FixedInEntry> single = new LinkedHashMap<>();
+        Set<String> repeated = new LinkedHashSet<>();
         for (String value : strings(node, INTRODUCED_IN)) {
-            FixedInEntry entry = FixedInEntry.parse(value)
-                    .orElseThrow(() -> invalid(node, "invalid introducedIn value"));
-            FixGroup group = byComponent.get(entry.getComponent());
-            if (group == null) {
-                throw invalid(node, "introducedIn names " + entry.getComponent() + ", which has no fixedIn value");
+            Optional<FixedInEntry> parsed = FixedInEntry.parse(value);
+            if (!parsed.isPresent()) {
+                ignoreIntroducedIn(node, "malformed introducedIn value");
+                continue;
             }
-            if (group.introducedVersion != null) {
-                throw invalid(node, "more than one introducedIn value for " + group.component);
+            String component = parsed.get().getComponent();
+            if (!byComponent.containsKey(component)) {
+                ignoreIntroducedIn(node, "introducedIn names " + component + ", which has no fixedIn value");
+            } else if (repeated.contains(component) || single.remove(component) != null) {
+                repeated.add(component);
+            } else {
+                single.put(component, parsed.get());
             }
-            if (entry.getGroupId() != null && !entry.getGroupId().equals(group.groupId)) {
-                throw invalid(node, "the introducedIn groupId of " + group.component + " differs from its fixedIn groupId");
-            }
-            group.introducedVersion = entry.getVersion();
         }
+        for (String component : repeated) {
+            ignoreIntroducedIn(node, "more than one introducedIn value for " + component);
+        }
+        for (FixedInEntry entry : single.values()) {
+            FixGroup group = byComponent.get(entry.getComponent());
+            if (entry.getGroupId() != null && !entry.getGroupId().equals(group.groupId)) {
+                ignoreIntroducedIn(node, "the introducedIn groupId of " + group.component + " differs from its fixedIn groupId");
+            } else {
+                group.introducedVersion = entry.getVersion();
+            }
+        }
+    }
+
+    private void ignoreIntroducedIn(JCRNodeWrapper node, String reason) {
+        logger.warn("Security advisory {}: introducedIn value ignored, clients will report every version below the fixes: {}",
+                node.getPath(), reason);
     }
 
     private static RepositoryException invalid(JCRNodeWrapper node, String reason) {

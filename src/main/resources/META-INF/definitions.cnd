@@ -157,7 +157,8 @@
 // "graphql-dxm-provider@3.10.0", "org.jahia.modules:graphql-dxm-provider@2.24.0" or "jahia-core@8.2.3.7".
 // introducedIn (optional): the first version of a component that has the flaw, same format, at most one
 // value per component, naming a component of fixedIn (with no groupId or the same one). Versions below
-// it are not affected. The feed checks these cross-value rules; the constraint checks the format only.
+// it are not affected. The constraint checks the format only; the feed ignores (and logs) a value that
+// breaks the other rules, so that component is served without introducedVersion.
 [jnt:forgeSecurityAdvisory] > jnt:content, mix:title, jmix:forge
  - advisoryId (string) mandatory < '^(JSA-[0-9]{4}-[0-9]{4}|CVE-[0-9]{4}-[0-9]{4,}|GHSA(-[23456789cfghjmpqrvwx]{4}){3})$'
  - severity (string, choicelist[resourceBundle]) mandatory < 'low', 'medium', 'high', 'critical'

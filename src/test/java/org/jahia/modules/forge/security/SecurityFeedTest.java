@@ -21,6 +21,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
+import org.slf4j.Logger;
 
 import javax.jcr.ItemNotFoundException;
 import javax.jcr.Node;
@@ -42,12 +43,14 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -58,6 +61,7 @@ class SecurityFeedTest {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private JCRTemplate jcrTemplate;
+    private Logger logger;
     private JCRSessionWrapper liveAdvisorySession;
     private JCRSessionWrapper editSession;
     private JCRNodeWrapper repository;
@@ -68,6 +72,7 @@ class SecurityFeedTest {
     @BeforeEach
     void setUp() throws Exception {
         jcrTemplate = mock(JCRTemplate.class);
+        logger = mock(Logger.class);
         liveAdvisorySession = mock(JCRSessionWrapper.class);
         editSession = mock(JCRSessionWrapper.class);
         when(jcrTemplate.doExecuteWithSystemSessionAsUser(isNull(), eq("live"), eq(Locale.ENGLISH), any()))
@@ -97,7 +102,7 @@ class SecurityFeedTest {
     }
 
     private JsonNode build() throws Exception {
-        return JSON.readTree(new SecurityFeed(jcrTemplate).build(repository));
+        return JSON.readTree(new SecurityFeed(jcrTemplate, logger).build(repository));
     }
 
     // ---------------------------------------------------------------- advisories
@@ -244,6 +249,7 @@ class SecurityFeedTest {
         assertThat(fixes.get(0).get("fixedVersions")).extracting(JsonNode::asText).containsExactly("3.10.0", "2.24.0");
         assertThat(fixes.get(1).get("component").asText()).isEqualTo("jahia-core");
         assertThat(fixes.get(1).has("introducedVersion")).isFalse();
+        verify(logger, never()).warn(anyString(), any(), any());
     }
 
     @Test
@@ -293,28 +299,61 @@ class SecurityFeedTest {
         assertThat(fix.get("introducedVersion").asText()).isEqualTo("2.0.0");
     }
 
+    /** reason, introducedIn values, expected graphql-dxm-provider and jahia-core introducedVersion (null = absent), WARN fragment */
     static Stream<Arguments> invalidIntroducedIn() {
         return Stream.of(
-                Arguments.of("malformed", new String[]{"graphql-dxm-provider@2..0"}),
-                Arguments.of("no version", new String[]{"graphql-dxm-provider"}),
-                Arguments.of("component absent from fixedIn", new String[]{"jcontent@3.0.0"}),
-                Arguments.of("groupId other than the fixedIn one", new String[]{"org.other:graphql-dxm-provider@2.0.0"}),
-                Arguments.of("groupId where fixedIn gives none", new String[]{"org.jahia:jahia-core@8.1.0.0"}),
-                Arguments.of("second value for a component",
-                        new String[]{"graphql-dxm-provider@2.0.0", "graphql-dxm-provider@2.1.0"}),
-                Arguments.of("one valid and one invalid value", new String[]{"jahia-core@8.1.0.0", "jcontent@3.0.0"}));
+                Arguments.of("malformed", new String[]{"graphql-dxm-provider@2..0", "jahia-core@8.1.0.0"},
+                        null, "8.1.0.0", "malformed introducedIn value"),
+                Arguments.of("no version", new String[]{"graphql-dxm-provider", "jahia-core@8.1.0.0"},
+                        null, "8.1.0.0", "malformed introducedIn value"),
+                Arguments.of("component absent from fixedIn",
+                        new String[]{"jcontent@3.0.0", "graphql-dxm-provider@2.0.0", "jahia-core@8.1.0.0"},
+                        "2.0.0", "8.1.0.0", "introducedIn names jcontent, which has no fixedIn value"),
+                Arguments.of("groupId other than the fixedIn one",
+                        new String[]{"org.other:graphql-dxm-provider@2.0.0", "jahia-core@8.1.0.0"},
+                        null, "8.1.0.0", "introducedIn groupId of graphql-dxm-provider differs"),
+                Arguments.of("groupId where fixedIn gives none",
+                        new String[]{"org.jahia:jahia-core@8.1.0.0", "graphql-dxm-provider@2.0.0"},
+                        "2.0.0", null, "introducedIn groupId of jahia-core differs"),
+                Arguments.of("second value for a component: both ignored",
+                        new String[]{"graphql-dxm-provider@2.0.0", "graphql-dxm-provider@2.1.0", "jahia-core@8.1.0.0"},
+                        null, "8.1.0.0", "more than one introducedIn value for graphql-dxm-provider"),
+                Arguments.of("second value with another groupId: both ignored, no guess",
+                        new String[]{"graphql-dxm-provider@2.0.0", "org.other:graphql-dxm-provider@2.1.0", "jahia-core@8.1.0.0"},
+                        null, "8.1.0.0", "more than one introducedIn value for graphql-dxm-provider"));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("invalidIntroducedIn")
-    @DisplayName("a published advisory with an invalid introducedIn value fails the feed (never a silent drop)")
-    void invalidIntroducedInFailsLoud(String reason, String[] introducedIn) throws Exception {
+    @DisplayName("an invalid introducedIn value is ignored for its component and logged once at WARN; the feed is served")
+    void invalidIntroducedInIgnoredAndLogged(String reason, String[] introducedIn, String expectedGraphql,
+                                             String expectedCore, String warning) throws Exception {
         JCRNodeWrapper advisory = publishedAdvisory("bad-intro", "graphql-dxm-provider@3.10.0",
                 "org.jahia.modules:graphql-dxm-provider@2.24.0", "jahia-core@8.2.3.7");
         multiProperty(advisory, "introducedIn", introducedIn);
 
-        assertThatThrownBy(this::build).as(reason).isInstanceOf(RepositoryException.class)
-                .hasMessageContaining(ADVISORIES + "/bad-intro").hasMessageContaining("introducedIn");
+        JsonNode advisories = build().get("advisories");
+
+        assertThat(advisories).as(reason).hasSize(1);
+        JsonNode fixes = advisories.get(0).get("fixes");
+        assertThat(fixes).as(reason).hasSize(2);
+        assertThat(fixes.get(0).get("component").asText()).isEqualTo("graphql-dxm-provider");
+        assertThat(fixes.get(0).get("fixedVersions")).extracting(JsonNode::asText).containsExactly("3.10.0", "2.24.0");
+        assertIntroducedVersion(reason, fixes.get(0), expectedGraphql);
+        assertThat(fixes.get(1).get("component").asText()).isEqualTo("jahia-core");
+        assertThat(fixes.get(1).get("fixedVersions")).extracting(JsonNode::asText).containsExactly("8.2.3.7");
+        assertIntroducedVersion(reason, fixes.get(1), expectedCore);
+        verify(logger, times(1)).warn(anyString(), any(), any());
+        verify(logger).warn(anyString(), eq(ADVISORIES + "/bad-intro"),
+                argThat(arg -> String.valueOf(arg).contains(warning)));
+    }
+
+    private static void assertIntroducedVersion(String reason, JsonNode fix, String expected) {
+        if (expected == null) {
+            assertThat(fix.has("introducedVersion")).as(reason + ": no introducedVersion on " + fix).isFalse();
+        } else {
+            assertThat(fix.get("introducedVersion").asText()).as(reason).isEqualTo(expected);
+        }
     }
 
     @Test
