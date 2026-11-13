@@ -4,7 +4,7 @@
              xmlns:j="http://www.jahia.org/jahia/1.0"
              xmlns:jnt="http://www.jahia.org/jahia/nt/1.0">
     <store-administrator j:hidden="false"
-           j:permissionNames="jahiaForgeModerateModule jahiaForgeUploadModule jcr:all_live jcr:all_default"
+           j:permissionNames="jahiaForgeModerateModule jahiaForgeUploadModule jcr:all_live jcr:all_default publish"
            j:privilegedAccess="true"
            j:roleGroup="site-role"
            jcr:primaryType="jnt:role">
