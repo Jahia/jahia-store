@@ -183,7 +183,7 @@
                              servlet, alias=/mavenproxy → /modules/mavenproxy) unregistered, so every
                              module download 404'd. NB: a @Component added in a NEW package (e.g. a
                              scheduled-job package) must be added here too, or it never activates. -->
-                        <_dsannotations>org.jahia.modules.forge.cache.*,org.jahia.modules.forge.valve.*,org.jahia.modules.forge.graphql.*,org.jahia.modules.forge.actions.*,org.jahia.modules.forge.proxy.*,org.jahia.modules.forge.settings.*,org.jahia.modules.forge.filters.*,org.jahia.modules.forge.migration.*</_dsannotations>
+                        <_dsannotations>org.jahia.modules.forge.cache.*,org.jahia.modules.forge.valve.*,org.jahia.modules.forge.graphql.*,org.jahia.modules.forge.actions.*,org.jahia.modules.forge.proxy.*,org.jahia.modules.forge.settings.*,org.jahia.modules.forge.filters.*,org.jahia.modules.forge.migration.*,org.jahia.modules.forge.security.*</_dsannotations>
                     </instructions>
                 </configuration>
             </plugin>

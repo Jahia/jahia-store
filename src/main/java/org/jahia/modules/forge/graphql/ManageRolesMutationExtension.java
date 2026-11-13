@@ -1,10 +1,12 @@
 package org.jahia.modules.forge.graphql;
 
 import org.apache.jackrabbit.core.fs.FileSystem;
+import org.jahia.modules.forge.security.AdvisoriesLock;
 import org.jahia.services.content.JCRCallback;
 import org.jahia.services.content.JCRNodeWrapper;
 import org.jahia.services.sites.JahiaSitesService;
 
+import javax.jcr.RepositoryException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -39,6 +41,7 @@ public final class ManageRolesMutationExtension {
             site.grantRoles(principalType.toPrincipalKey(principalName),
                     new HashSet<>(Collections.singletonList(role)));
             session.save();
+            lockAdvisories(siteKey, role);
             return Boolean.TRUE;
         });
     }
@@ -69,8 +72,20 @@ public final class ManageRolesMutationExtension {
             }
 
             session.save();
+            lockAdvisories(siteKey, role);
             return Boolean.TRUE;
         });
+    }
+
+    /**
+     * A store developer must not write in the site's security advisories folder: once its grants change,
+     * bring the folder's DENY entries in line (see {@link AdvisoriesLock}). The JCR listener does it too;
+     * calling it here makes the mutation fail loudly if the lock cannot be written.
+     */
+    private static void lockAdvisories(String siteKey, String role) throws RepositoryException {
+        if (AdvisoriesLock.ROLE.equals(role)) {
+            AdvisoriesLock.syncSite(siteKey);
+        }
     }
 
     /**
