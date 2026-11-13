@@ -1,5 +1,23 @@
 # Changelog
 
+## 5.2.0 (unreleased)
+
+### Added
+
+- **Security updates feed.** `/contents/modules-repository.securityUpdates.json` lists the security
+  advisories published by the security team and the module versions their owners flag as containing
+  security fixes, so that Jahia instances can warn their administrators. See the README.
+  - New content type *Security advisory* (`jnt:forgeSecurityAdvisory`), created in the new
+    `contents/security-advisories` folder. Customers see an advisory only once it is published with
+    no pending change.
+  - New optional properties on module versions: `securityFix`, `securitySeverity`,
+    `securityReferences` and `securityNote`.
+  - `moduleList.json` is unchanged.
+
+  **What to do:** nothing to enable the feed. Before adding the first advisory, check that the
+  store site has a `contents/security-advisories` folder. If it does not, create a content folder
+  with that name.
+
 ## 5.1.2 (2026-09-23)
 
 Deploy with `jahia-store-template` 5.0.6, which displays the upload date and handles the public edge
