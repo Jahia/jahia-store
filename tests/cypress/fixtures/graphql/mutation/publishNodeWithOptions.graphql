@@ -1,0 +1,17 @@
+# Jahia publication of one node (graphql-dxm-provider publish mutation), with the sub-node options as
+# variables. With publishSubNodes=false only the node itself is published, with its ACL (j:acl is not
+# jmix:publication, so it goes with its parent): 31-securityUpdatesFeed uses it to make a site-level role
+# grant effective in live without publishing the site's content. Nodes the caller may not publish
+# (no "publish" permission) are silently skipped: the mutation still answers true.
+mutation PublishNodeWithOptions(
+    $pathOrId: String!
+    $languages: [String]!
+    $publishSubNodes: Boolean!
+    $includeSubTree: Boolean!
+) {
+    jcr(workspace: EDIT) {
+        mutateNode(pathOrId: $pathOrId) {
+            publish(languages: $languages, publishSubNodes: $publishSubNodes, includeSubTree: $includeSubTree)
+        }
+    }
+}

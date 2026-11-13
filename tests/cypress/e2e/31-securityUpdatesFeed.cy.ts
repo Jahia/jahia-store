@@ -5,8 +5,11 @@ import {
     deleteSite,
     deleteUser,
     grantRoles,
+    markForDeletion,
     publishAndWaitJobEnding,
-    setNodeProperty
+    setNodeProperty,
+    unpublishNode,
+    waitAllJobsFinished
 } from '@jahia/cypress';
 
 /**
@@ -15,15 +18,22 @@ import {
  *
  * Model under test:
  *   - advisories live in <site>/contents/security-advisories (created by the jahia-store-template site
- *     import). The feed reads them from the EDIT workspace and lists those whose `published` box is
- *     checked; Jahia publication plays no part, and edits apply at once;
- *   - store and site administrators can write advisories; store developers cannot (their role writes
- *     LIVE only), and what they write in live never reaches the feed;
+ *     import). The feed reads them from the LIVE workspace and lists one only when it is published with
+ *     Jahia's publication AND its "Published in the security feed" box (`published`) is checked in the
+ *     published version. An edit in the edit workspace changes nothing until the advisory is published
+ *     again; unpublishing it, or unchecking the box and publishing, withdraws it;
+ *   - store developers cannot create, modify or delete anything in the advisories folder, in either
+ *     workspace (AdvisoriesLock: a DENY of store-developer on the folder for every granted principal),
+ *     whether they were granted before the folder was published, through the store's own
+ *     forge { grantRole } mutation, or directly in live. They keep their write access elsewhere;
+ *   - second line of defence: an advisory written directly in live (Jahia's jmix:liveProperties or
+ *     j:originWS=live markers) is ignored, even when the writer is allowed to write there (root here);
  *   - owner-flagged versions (securityFix) follow moduleList.json visibility: published modules and
  *     published versions only.
  *
  * Every refusal is paired with a positive control, so a missing folder or a broken fixture cannot make
  * a refusal test pass for the wrong reason. The view is not cached: each fetch sees the current state.
+ * The tests run in order and share the site's state.
  */
 describe('Security updates feed (securityUpdates.json)', () => {
     const siteKey = 'secFeedSite';
@@ -36,17 +46,32 @@ describe('Security updates feed (securityUpdates.json)', () => {
     const DEV = 'secfeeddev';
     const DEV_PWD = 'Secfeeddev#1234';
     const devCreds = {username: DEV, password: DEV_PWD};
+    const DEV2 = 'secfeeddev2';
+    const DEV2_PWD = 'Secfeeddev2#1234';
+    const dev2Creds = {username: DEV2, password: DEV2_PWD};
+    const DEV3 = 'secfeeddev3';
+    const DEV3_PWD = 'Secfeeddev3#1234';
+    const dev3Creds = {username: DEV3, password: DEV3_PWD};
     const STORE_ADMIN = 'secfeedadmin';
     const STORE_ADMIN_PWD = 'Secfeedadmin#1234';
     const storeAdminCreds = {username: STORE_ADMIN, password: STORE_ADMIN_PWD};
 
     const moduleName = 'cy-sec-module';
     const modulePath = `${repositoryPath}/${moduleName}`;
+    const advisoryPath = (name: string) => `${advisoriesPath}/${name}`;
 
     const addNodeInWorkspace: DocumentNode =
         require('graphql-tag/loader!../fixtures/graphql/mutation/addNodeInWorkspace.graphql');
     const setPropertyInWorkspace: DocumentNode =
         require('graphql-tag/loader!../fixtures/graphql/mutation/setPropertyInWorkspace.graphql');
+    const deleteNodeInWorkspace: DocumentNode =
+        require('graphql-tag/loader!../fixtures/graphql/mutation/deleteNodeInWorkspace.graphql');
+    const grantNodeRoles: DocumentNode =
+        require('graphql-tag/loader!../fixtures/graphql/mutation/grantNodeRoles.graphql');
+    const grantSiteRole: DocumentNode =
+        require('graphql-tag/loader!../fixtures/graphql/mutation/grantSiteRole.graphql');
+    const publishNodeWithOptions: DocumentNode =
+        require('graphql-tag/loader!../fixtures/graphql/mutation/publishNodeWithOptions.graphql');
     const createForgeModule: DocumentNode =
         require('graphql-tag/loader!../fixtures/graphql/mutation/createForgeModule.graphql');
     const getNodeByPath: DocumentNode =
@@ -62,6 +87,8 @@ describe('Security updates feed (securityUpdates.json)', () => {
         advisories: Advisory[];
         flaggedVersions: Array<{ groupId?: string; name: string; version: string; severity?: string; references: string[]; note?: string }>;
     };
+    type Creds = { username: string; password: string };
+    type Workspace = 'EDIT' | 'LIVE';
 
     const advisoryProps = (id: string, severity: string, fixedIn: string[], published = true) => [
         {name: 'jcr:title', value: `Advisory ${id}`, language: 'en'},
@@ -71,7 +98,7 @@ describe('Security updates feed (securityUpdates.json)', () => {
         {name: 'published', value: String(published)}
     ];
 
-    const addAdvisoryVars = (workspace: 'EDIT' | 'LIVE', name: string, properties: object[]) => ({
+    const addAdvisoryVars = (workspace: Workspace, name: string, properties: object[]) => ({
         workspace, parentPath: advisoriesPath, name, primaryNodeType: 'jnt:forgeSecurityAdvisory', properties
     });
 
@@ -88,9 +115,23 @@ describe('Security updates feed (securityUpdates.json)', () => {
         });
 
     /** Runs a mutation with the given account (null = root) and yields its GraphQL errors ([] = accepted). */
-    const errorsAs = (creds: { username: string; password: string } | null, mutation: DocumentNode, variables: object) => {
+    const errorsAs = (creds: Creds | null, mutation: DocumentNode, variables: object) => {
+        if (!creds) {
+            cy.login();
+        }
+
         const client = creds ? cy.apolloClient(creds, {log: true, setCurrentApolloClient: false}) : cy;
         return client.apollo({mutation, variables, errorPolicy: 'all'}).then(res => res.errors || []);
+    };
+
+    /** Sets `property` of advisory `name` to `value` in `workspace` as the given account; yields the errors. */
+    const setAdvisoryProperty = (creds: Creds | null, workspace: Workspace, name: string, [property, value]: [string, string]) =>
+        errorsAs(creds, setPropertyInWorkspace, {workspace, pathOrId: advisoryPath(name), name: property, value});
+
+    /** Jahia publication of one advisory (and its translations), as root. */
+    const publishAdvisory = (name: string) => {
+        cy.login();
+        publishAndWaitJobEnding(advisoryPath(name), ['en']);
     };
 
     const fetchFeedAnonymously = () => {
@@ -104,6 +145,31 @@ describe('Security updates feed (securityUpdates.json)', () => {
 
     const advisoryIds = () => fetchFeedAnonymously().then(feed => feed.advisories.map(a => a.id).sort());
 
+    const severityOf = (id: string) => fetchFeedAnonymously()
+        .then(feed => feed.advisories.find(a => a.id === id)?.severity);
+
+    /** The store developer's positive control: a write in live outside the advisories folder is accepted. */
+    const writesInLiveElsewhere = (creds: Creds, value: string) =>
+        errorsAs(creds, setPropertyInWorkspace, {
+            workspace: 'LIVE', pathOrId: `${modulePath}/${moduleName}-1.4.1`, name: 'securityNote', value
+        }).should('have.length', 0);
+
+    /** A store developer can neither create, nor modify, nor delete an advisory, in the given workspace. */
+    const cannotWriteAdvisories = (creds: Creds, workspace: Workspace, newName: string) => {
+        errorsAs(creds, addNodeInWorkspace, addAdvisoryVars(workspace, newName, advisoryProps('JSA-2026-9099', 'critical', ['jahia-core@9.9.9.9'])))
+            .should('have.length.greaterThan', 0);
+        setAdvisoryProperty(creds, workspace, 'jsa-2026-9001', ['severity', 'low']).should('have.length.greaterThan', 0);
+        setAdvisoryProperty(creds, workspace, 'jsa-2026-9001', ['published', 'false']).should('have.length.greaterThan', 0);
+        errorsAs(creds, deleteNodeInWorkspace, {workspace, pathOrId: advisoryPath('jsa-2026-9001')})
+            .should('have.length.greaterThan', 0);
+    };
+
+    /** A is untouched: listed, with its original severity. */
+    const advisoryAIsIntact = () => {
+        advisoryIds().should('include', 'JSA-2026-9001').and('not.include', 'JSA-2026-9099');
+        severityOf('JSA-2026-9001').should('equal', 'high');
+    };
+
     before(() => {
         cy.login();
         try {
@@ -112,7 +178,7 @@ describe('Security updates feed (securityUpdates.json)', () => {
             // First run.
         }
 
-        [DEV, STORE_ADMIN].forEach(user => {
+        [DEV, DEV2, DEV3, STORE_ADMIN].forEach(user => {
             try {
                 deleteUser(user);
             } catch {
@@ -122,11 +188,14 @@ describe('Security updates feed (securityUpdates.json)', () => {
 
         createSite(siteKey, {languages: 'en', templateSet: 'jahia-store-template', serverName: 'secfeed.local', locale: 'en'});
         createUser(DEV, DEV_PWD);
-        grantRoles(sitePath, ['store-developer'], DEV, 'USER');
+        createUser(DEV2, DEV2_PWD);
+        createUser(DEV3, DEV3_PWD);
         createUser(STORE_ADMIN, STORE_ADMIN_PWD);
+        // Granted in the edit workspace before the site is published: the lock reaches live with the folder.
+        grantRoles(sitePath, ['store-developer'], DEV, 'USER');
         grantRoles(sitePath, ['store-administrator'], STORE_ADMIN, 'USER');
 
-        // A: published, every optional field set. B: same, box unchecked.
+        // A: box checked, every optional field set. B: same, box unchecked.
         cy.apollo({
             mutation: addNodeInWorkspace,
             variables: addAdvisoryVars('EDIT', 'jsa-2026-9001', [
@@ -160,15 +229,14 @@ describe('Security updates feed (securityUpdates.json)', () => {
         setNodeProperty(modulePath, 'groupId', 'org.cypress.security', 'en');
         setNodeProperty(modulePath, 'published', 'true', 'en');
 
-        // Publishes the site so that the module list, and the live copy of the advisories folder, exist.
+        // Publishes the site: the module list, the advisories folder (with its lock) and A and B reach live.
         publishAndWaitJobEnding(sitePath, ['en']);
     });
 
     after(() => {
         cy.login();
         deleteSite(siteKey);
-        deleteUser(DEV);
-        deleteUser(STORE_ADMIN);
+        [DEV, DEV2, DEV3, STORE_ADMIN].forEach(user => deleteUser(user));
     });
 
     it('the site import creates the security-advisories folder', () => {
@@ -177,8 +245,7 @@ describe('Security updates feed (securityUpdates.json)', () => {
             .its('data.jcr.nodeByPath.primaryNodeType.name').should('eq', 'jnt:contentFolder');
     });
 
-    it('lists the advisory whose published box is checked, without Jahia publication', () => {
-        // B (box unchecked) is absent.
+    it('lists a published advisory whose box is checked, not a published one whose box is unchecked', () => {
         advisoryIds().should('deep.equal', ['JSA-2026-9001']);
     });
 
@@ -198,54 +265,135 @@ describe('Security updates feed (securityUpdates.json)', () => {
         });
     });
 
-    it('a store administrator writes an advisory, which is listed at once', () => {
-        errorsAs(storeAdminCreds, addNodeInWorkspace, addAdvisoryVars('EDIT', 'jsa-2026-9003', advisoryProps('JSA-2026-9003', 'medium', ['jcontent@3.8.2'])))
-            .should('have.length', 0);
-        advisoryIds().should('include', 'JSA-2026-9003');
-    });
+    describe('Jahia publication', () => {
+        it('an advisory with its box checked is absent until it is published in Jahia', () => {
+            errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', 'jsa-2026-9003', advisoryProps('JSA-2026-9003', 'medium', ['jcontent@3.8.2'])))
+                .should('have.length', 0);
+            advisoryIds().should('not.include', 'JSA-2026-9003');
 
-    it('positive control: the store developer writes in live, including in the advisories folder', () => {
-        errorsAs(devCreds, setPropertyInWorkspace, {
-            workspace: 'LIVE', pathOrId: `${modulePath}/${moduleName}-1.4.1`, name: 'securityNote', value: 'written in live'
-        }).should('have.length', 0);
-        errorsAs(devCreds, addNodeInWorkspace, addAdvisoryVars('LIVE', 'jsa-2026-9004', advisoryProps('JSA-2026-9004', 'critical', ['jahia-core@9.9.9.9'])))
-            .should('have.length', 0);
-    });
+            publishAdvisory('jsa-2026-9003');
+            advisoryIds().should('include', 'JSA-2026-9003');
+        });
 
-    it('what the store developer wrote in live never reaches the feed', () => {
-        advisoryIds().should('not.include', 'JSA-2026-9004');
-    });
+        it('an edit in the edit workspace changes nothing until the advisory is published again', () => {
+            setAdvisoryProperty(null, 'EDIT', 'jsa-2026-9003', ['severity', 'critical']).should('have.length', 0);
+            severityOf('JSA-2026-9003').should('equal', 'medium');
 
-    it('the store developer cannot create or change an advisory in the edit workspace', () => {
-        errorsAs(devCreds, addNodeInWorkspace, addAdvisoryVars('EDIT', 'jsa-2026-9005', advisoryProps('JSA-2026-9005', 'critical', ['jahia-core@9.9.9.9'])))
-            .should('have.length.greaterThan', 0);
-        errorsAs(devCreds, setPropertyInWorkspace, {
-            workspace: 'EDIT', pathOrId: `${advisoriesPath}/jsa-2026-9001`, name: 'severity', value: 'low'
-        }).should('have.length.greaterThan', 0);
-        errorsAs(devCreds, setPropertyInWorkspace, {
-            workspace: 'EDIT', pathOrId: `${advisoriesPath}/jsa-2026-9001`, name: 'published', value: 'false'
-        }).should('have.length.greaterThan', 0);
+            publishAdvisory('jsa-2026-9003');
+            severityOf('JSA-2026-9003').should('equal', 'critical');
+        });
 
-        advisoryIds().should('include', 'JSA-2026-9001').and('not.include', 'JSA-2026-9005');
-        fetchFeedAnonymously().its('advisories').then(advisories => {
-            expect((advisories as Advisory[]).find(a => a.id === 'JSA-2026-9001')!.severity).to.equal('high');
+        it('unchecking the box withdraws the advisory once published, not before', () => {
+            setAdvisoryProperty(null, 'EDIT', 'jsa-2026-9003', ['published', 'false']).should('have.length', 0);
+            advisoryIds().should('include', 'JSA-2026-9003');
+
+            publishAdvisory('jsa-2026-9003');
+            advisoryIds().should('not.include', 'JSA-2026-9003');
+        });
+
+        it('unpublishing the advisory in Jahia withdraws it', () => {
+            // Positive control: box checked again and published, so it is listed.
+            setAdvisoryProperty(null, 'EDIT', 'jsa-2026-9003', ['published', 'true']).should('have.length', 0);
+            publishAdvisory('jsa-2026-9003');
+            advisoryIds().should('include', 'JSA-2026-9003');
+
+            cy.login();
+            unpublishNode(advisoryPath('jsa-2026-9003'), 'en');
+            advisoryIds().should('not.include', 'JSA-2026-9003');
+            advisoryIds().should('deep.equal', ['JSA-2026-9001']);
         });
     });
 
-    it('an edit applies at once, and unchecking the box removes the advisory', () => {
-        cy.login();
-        errorsAs(null, setPropertyInWorkspace, {
-            workspace: 'EDIT', pathOrId: `${advisoriesPath}/jsa-2026-9003`, name: 'severity', value: 'critical'
-        }).should('have.length', 0);
-        fetchFeedAnonymously().then(feed => {
-            expect(feed.advisories.find(a => a.id === 'JSA-2026-9003')!.severity).to.equal('critical');
+    describe('store developers are locked out of the advisories folder', () => {
+        it('a developer granted before the folder was published: refused in live and edit, still writes elsewhere in live', () => {
+            writesInLiveElsewhere(devCreds, 'written in live by the developer');
+            cannotWriteAdvisories(devCreds, 'LIVE', 'jsa-2026-9004');
+            cannotWriteAdvisories(devCreds, 'EDIT', 'jsa-2026-9005');
+            advisoryAIsIntact();
         });
 
-        cy.login();
-        errorsAs(null, setPropertyInWorkspace, {
-            workspace: 'EDIT', pathOrId: `${advisoriesPath}/jsa-2026-9003`, name: 'published', value: 'false'
-        }).should('have.length', 0);
-        advisoryIds().should('deep.equal', ['JSA-2026-9001']);
+        it('a developer granted through forge { grantRole } after the folder exists is locked out too', () => {
+            errorsAs(null, grantSiteRole, {siteKey, role: 'store-developer', principalName: DEV2, principalType: 'USER'})
+                .should('have.length', 0);
+            // Publishes the site node alone (with its ACL), so the new grant is effective in live; the
+            // advisories folder is not republished: the lock in live is the one the store wrote there.
+            cy.login();
+            cy.apollo({mutation: publishNodeWithOptions, variables: {pathOrId: sitePath, languages: ['en'], publishSubNodes: false, includeSubTree: false}});
+            waitAllJobsFinished('Publication of the site node', 60000);
+
+            writesInLiveElsewhere(dev2Creds, 'written in live by the second developer');
+            cannotWriteAdvisories(dev2Creds, 'LIVE', 'jsa-2026-9006');
+            cannotWriteAdvisories(dev2Creds, 'EDIT', 'jsa-2026-9007');
+            advisoryAIsIntact();
+        });
+
+        it('a developer granted directly in live (no publication) is locked out at once', () => {
+            errorsAs(null, grantNodeRoles, {
+                workspace: 'LIVE', pathOrId: sitePath, principalType: 'USER', principalName: DEV3, roleNames: ['store-developer']
+            }).should('have.length', 0);
+
+            writesInLiveElsewhere(dev3Creds, 'written in live by the third developer');
+            cannotWriteAdvisories(dev3Creds, 'LIVE', 'jsa-2026-9008');
+            advisoryAIsIntact();
+        });
+    });
+
+    describe('store administrators keep their rights', () => {
+        it('a store administrator creates and edits an advisory in the edit workspace', () => {
+            errorsAs(storeAdminCreds, addNodeInWorkspace, addAdvisoryVars('EDIT', 'jsa-2026-9010', advisoryProps('JSA-2026-9010', 'medium', ['jcontent@3.8.2'])))
+                .should('have.length', 0);
+            setAdvisoryProperty(storeAdminCreds, 'EDIT', 'jsa-2026-9010', ['severity', 'high']).should('have.length', 0);
+            // Not published yet: absent.
+            advisoryIds().should('not.include', 'JSA-2026-9010');
+        });
+
+        // Skipped: store-administrator (jahiaForgeModerateModule jahiaForgeUploadModule jcr:all_live
+        // jcr:all_default) does not hold Jahia's "publish" permission, a sibling of jcr:all_default and
+        // jcr:all_live under /permissions/repository-permissions, not part of either. Jahia's publication
+        // (ComplexPublicationService.publish, JCRPublicationService.publish with checkPermissions) skips
+        // nodes where hasPermission("publish") is false, so the mutation answers true and publishes nothing.
+        // Adding the permission to the role is a product decision, pending.
+        it.skip('a store administrator publishes the advisory, which is then listed', () => {
+            cy.apolloClient(storeAdminCreds, {log: true, setCurrentApolloClient: false})
+                .apollo({mutation: publishNodeWithOptions, variables: {pathOrId: advisoryPath('jsa-2026-9010'), languages: ['en'], publishSubNodes: true, includeSubTree: true}});
+            cy.login();
+            waitAllJobsFinished('Publication of the advisory by the store administrator', 60000);
+            advisoryIds().should('include', 'JSA-2026-9010');
+        });
+    });
+
+    describe('an advisory written directly in live is ignored (second line of defence)', () => {
+        it('a published advisory changed in live (jmix:liveProperties) is withdrawn, and a republication does not restore it', () => {
+            errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', 'jsa-2026-9011', advisoryProps('JSA-2026-9011', 'low', ['jcontent@3.8.2'])))
+                .should('have.length', 0);
+            publishAdvisory('jsa-2026-9011');
+            advisoryIds().should('include', 'JSA-2026-9011');
+
+            // Root is not locked: it writes in live the way a store developer used to.
+            setAdvisoryProperty(null, 'LIVE', 'jsa-2026-9011', ['severity', 'critical']).should('have.length', 0);
+            advisoryIds().should('not.include', 'JSA-2026-9011');
+
+            // Jahia keeps jmix:liveProperties (and the live value) through a publication from edit.
+            setAdvisoryProperty(null, 'EDIT', 'jsa-2026-9011', ['advisoryUrl', 'https://academy.jahia.com/republished']).should('have.length', 0);
+            publishAdvisory('jsa-2026-9011');
+            advisoryIds().should('not.include', 'JSA-2026-9011');
+        });
+
+        it('recovery: delete the tampered advisory, publish the deletion, publish a new one', () => {
+            cy.login();
+            markForDeletion(advisoryPath('jsa-2026-9011'));
+            publishAdvisory('jsa-2026-9011');
+            errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', 'jsa-2026-9011-r', advisoryProps('JSA-2026-9011', 'low', ['jcontent@3.8.2'])))
+                .should('have.length', 0);
+            publishAdvisory('jsa-2026-9011-r');
+            advisoryIds().should('include', 'JSA-2026-9011');
+        });
+
+        it('an advisory created in live (j:originWS=live) is never listed', () => {
+            errorsAs(null, addNodeInWorkspace, addAdvisoryVars('LIVE', 'jsa-2026-9012', advisoryProps('JSA-2026-9012', 'critical', ['jahia-core@9.9.9.9'])))
+                .should('have.length', 0);
+            advisoryIds().should('not.include', 'JSA-2026-9012').and('include', 'JSA-2026-9001');
+        });
     });
 
     it('lists owner-flagged versions of published modules, published versions only', () => {
@@ -274,7 +422,6 @@ describe('Security updates feed (securityUpdates.json)', () => {
     });
 
     it('refuses a malformed fixedIn value at write time (CND constraint)', () => {
-        cy.login();
         // Positive control: the same advisory with a valid value is accepted, its vulnerabilities given as
         // Jahia vulnerability identifiers (JSA-YYYY-NNNN.NNNN), as the security team writes them.
         errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', 'good-fixed-in', [
