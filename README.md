@@ -18,10 +18,13 @@ Its website and in-site administration UI are provided by the sibling
 `/contents/modules-repository.securityUpdates.json` tells Jahia instances which updates fix security
 issues. It sits next to `moduleList.json`, which it does not change.
 
-- **Advisories** (`advisories`): the security team creates a *Security advisory* in the site's
-  `contents/security-advisories` folder in jContent, then publishes it. Customers see it only once
-  it is published with no pending change. The feed reads advisories from the edit workspace, so a
-  change made directly in live does not reach customers.
+- **Advisories** (`advisories`): a site administrator of the store creates a *Security advisory* in
+  the site's `contents/security-advisories` folder in jContent, then publishes it.
+  - Only the store site's administrators (and `root`) can write in that folder. It does not inherit the
+    site ACL, because store developers hold `jcr:write_live` on the rest of the site.
+  - Customers see an advisory only once it is published with no pending change, in every language of
+    the site. Editing a published advisory withdraws it from the feed until you publish it again.
+  - The feed reads advisories from the edit workspace.
   - `advisoryId`: `JSA-YYYY-NNNN`, a CVE or a GHSA identifier.
   - `severity`: `low`, `medium`, `high` or `critical`.
   - `fixedIn`: one value per fixed component and maintained line, written
@@ -31,7 +34,9 @@ issues. It sits next to `moduleList.json`, which it does not change.
   - Optional: `cvss`, `cves`, `advisoryUrl`, `publishedDate`, `summary`.
 - **Flagged versions** (`flaggedVersions`): a module owner can mark a version as containing
   security fixes (`securityFix`, with an optional `securitySeverity`, `securityReferences` and
-  `securityNote`). Published versions of published modules only, as in `moduleList.json`.
+  `securityNote`). Published versions of published modules only, as in `moduleList.json`. Any store
+  developer can set these flags, so clients must show them as reported by the module owner, not as
+  Jahia advisories.
 
 ```json
 {"schemaVersion": 1,
@@ -45,8 +50,9 @@ issues. It sits next to `moduleList.json`, which it does not change.
                       "severity": "medium", "references": ["GHSA-..."], "note": "..."}]}
 ```
 
-The view is cached for 10 minutes. When the repository cannot be read, it answers `503` rather than
-an empty feed, which would tell every client that nothing needs fixing.
+The view is not cached. When the repository cannot be read, or when a published advisory is not
+valid, it answers `503` with `{"error": "security feed unavailable"}` rather than a partial or empty
+feed, which would tell every client that nothing needs fixing.
 
 ## Build & test
 

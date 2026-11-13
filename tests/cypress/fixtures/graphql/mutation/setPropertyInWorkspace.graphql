@@ -3,11 +3,12 @@ mutation SetPropertyInWorkspace(
     $pathOrId: String!
     $name: String!
     $value: String!
+    $language: String
 ) {
     jcr(workspace: $workspace) {
         mutateNode(pathOrId: $pathOrId) {
             mutateProperty(name: $name) {
-                setValue(value: $value)
+                setValue(value: $value, language: $language)
             }
         }
     }
