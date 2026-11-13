@@ -2,7 +2,6 @@ package org.jahia.modules.forge.security;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.jackrabbit.core.fs.FileSystem;
 import org.jahia.api.Constants;
 import org.jahia.services.content.JCRNodeIteratorWrapper;
 import org.jahia.services.content.JCRNodeWrapper;
@@ -10,7 +9,6 @@ import org.jahia.services.content.JCRPropertyWrapper;
 import org.jahia.services.content.JCRSessionWrapper;
 import org.jahia.services.content.JCRTemplate;
 import org.jahia.services.content.JCRValueWrapper;
-import org.jahia.services.sites.JahiaSitesService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,10 +35,14 @@ import java.util.TimeZone;
  * <ul>
  *   <li>{@code advisories}: {@code jnt:forgeSecurityAdvisory} nodes under
  *       {@code /sites/<site>/contents/security-advisories} (created by the jahia-store-template site import),
- *       read from the EDIT workspace with a system session, and listed when their {@code published} box is
- *       checked. Jahia publication plays no part, and live is never read: store developers hold
- *       {@code jcr:write_live} on the whole site but no edit-workspace write, so they cannot create, change or
- *       hide an advisory, while store and site administrators can. Edits apply at once.</li>
+ *       read from the LIVE workspace with a system session. An advisory is listed only when BOTH it is
+ *       published with Jahia's publication (it exists in live and its live {@code j:published} is not false)
+ *       AND its "Published in the security feed" box ({@code published}) is checked in that published
+ *       version. So an edit made in the edit workspace changes nothing until the advisory is published
+ *       again; unpublishing it in Jahia, or unchecking the box and publishing, withdraws it; an edit never
+ *       withdraws it in between. Store developers cannot write in the folder ({@link AdvisoriesLock}), and
+ *       a live node written in live rather than published from edit is ignored
+ *       ({@link LiveChangeDetector}).</li>
  *   <li>{@code flaggedVersions}: module versions whose owner set {@code securityFix}, read from the LIVE
  *       workspace in the caller's own session, with the visibility rules of {@code moduleList.json}
  *       (published modules, published versions). Any store developer can set these flags, so clients must
@@ -54,13 +56,13 @@ public final class SecurityFeed {
 
     static final int SCHEMA_VERSION = 1;
     static final String ADVISORY_TYPE = "jnt:forgeSecurityAdvisory";
-    static final String ADVISORIES_FOLDER = "security-advisories";
     static final List<String> SEVERITIES = Collections.unmodifiableList(Arrays.asList("low", "medium", "high", "critical"));
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SecurityFeed.class);
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String MODULE_TYPE = "jnt:forgeModule";
     private static final String PUBLISHED = "published";
+    private static final String JAHIA_PUBLISHED = Constants.PUBLISHED;
 
     private static final String MARKED_FOR_DELETION = "jmix:markedForDeletion";
 
@@ -102,30 +104,38 @@ public final class SecurityFeed {
     // ------------------------------------------------------------------------------------ advisories
 
     private List<Map<String, Object>> readAdvisories(String siteKey) throws RepositoryException {
-        String folderPath = JahiaSitesService.SITES_JCR_PATH + FileSystem.SEPARATOR + siteKey
-                + FileSystem.SEPARATOR + "contents" + FileSystem.SEPARATOR + ADVISORIES_FOLDER;
-        return jcrTemplate.doExecuteWithSystemSessionAsUser(null, Constants.EDIT_WORKSPACE, Locale.ENGLISH,
-                session -> readAdvisories(session, folderPath));
+        String folderPath = AdvisoriesFolder.path(siteKey);
+        return jcrTemplate.doExecuteWithSystemSessionAsUser(null, Constants.LIVE_WORKSPACE, Locale.ENGLISH,
+                live -> jcrTemplate.doExecuteWithSystemSessionAsUser(null, Constants.EDIT_WORKSPACE, null,
+                        edit -> readAdvisories(live, edit, folderPath)));
     }
 
-    private List<Map<String, Object>> readAdvisories(JCRSessionWrapper session, String folderPath)
+    private List<Map<String, Object>> readAdvisories(JCRSessionWrapper live, JCRSessionWrapper edit, String folderPath)
             throws RepositoryException {
         JCRNodeWrapper folder;
         try {
-            folder = session.getNode(folderPath);
+            folder = live.getNode(folderPath);
         } catch (PathNotFoundException e) {
-            LOGGER.info("No security advisories folder at {}: the feed lists no advisory", folderPath);
+            LOGGER.info("No published security advisories folder at {}: the feed lists no advisory", folderPath);
             return Collections.emptyList();
         }
         List<Map<String, Object>> advisories = new ArrayList<>();
         JCRNodeIteratorWrapper children = folder.getNodes();
         while (children.hasNext()) {
             JCRNodeWrapper child = (JCRNodeWrapper) children.nextNode();
-            if (child.isNodeType(ADVISORY_TYPE) && bool(child, PUBLISHED) && !child.isNodeType(MARKED_FOR_DELETION)) {
+            if (isListed(child) && !LiveChangeDetector.isWrittenInLive(child, edit)) {
                 advisories.add(toAdvisory(child));
             }
         }
         return advisories;
+    }
+
+    /** An advisory, published in Jahia (live j:published not false), with its feed box checked, not deleted. */
+    private static boolean isListed(JCRNodeWrapper node) throws RepositoryException {
+        return node.isNodeType(ADVISORY_TYPE)
+                && !node.isNodeType(MARKED_FOR_DELETION)
+                && !(node.hasProperty(JAHIA_PUBLISHED) && !node.getProperty(JAHIA_PUBLISHED).getBoolean())
+                && bool(node, PUBLISHED);
     }
 
     private static Map<String, Object> toAdvisory(JCRNodeWrapper node) throws RepositoryException {

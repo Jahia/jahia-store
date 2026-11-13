@@ -19,7 +19,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import javax.jcr.ItemNotFoundException;
+import javax.jcr.Node;
+import javax.jcr.NodeIterator;
 import javax.jcr.PathNotFoundException;
+import javax.jcr.Property;
 import javax.jcr.RepositoryException;
 import javax.jcr.query.Query;
 import java.util.ArrayList;
@@ -39,6 +43,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -49,6 +54,7 @@ class SecurityFeedTest {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private JCRTemplate jcrTemplate;
+    private JCRSessionWrapper liveAdvisorySession;
     private JCRSessionWrapper editSession;
     private JCRNodeWrapper repository;
     private QueryManagerWrapper queryManager;
@@ -58,10 +64,14 @@ class SecurityFeedTest {
     @BeforeEach
     void setUp() throws Exception {
         jcrTemplate = mock(JCRTemplate.class);
+        liveAdvisorySession = mock(JCRSessionWrapper.class);
         editSession = mock(JCRSessionWrapper.class);
-        when(jcrTemplate.doExecuteWithSystemSessionAsUser(isNull(), eq("default"), eq(Locale.ENGLISH), any()))
+        when(jcrTemplate.doExecuteWithSystemSessionAsUser(isNull(), eq("live"), eq(Locale.ENGLISH), any()))
+                .thenAnswer(inv -> inv.<JCRCallback<?>>getArgument(3).doInJCR(liveAdvisorySession));
+        when(jcrTemplate.doExecuteWithSystemSessionAsUser(isNull(), eq("default"), isNull(), any()))
                 .thenAnswer(inv -> inv.<JCRCallback<?>>getArgument(3).doInJCR(editSession));
-        when(editSession.getNode(anyString())).thenThrow(new PathNotFoundException());
+        when(liveAdvisorySession.getNode(anyString())).thenThrow(new PathNotFoundException());
+        when(editSession.getNodeByIdentifier(anyString())).thenAnswer(inv -> mock(JCRNodeWrapper.class));
 
         JCRSiteNode site = mock(JCRSiteNode.class);
         when(site.getSiteKey()).thenReturn(SITE);
@@ -247,10 +257,157 @@ class SecurityFeedTest {
     @Test
     @DisplayName("a repository error while reading advisories propagates: never answer 'no advisories'")
     void repositoryErrorPropagates() throws Exception {
-        when(jcrTemplate.doExecuteWithSystemSessionAsUser(isNull(), eq("default"), eq(Locale.ENGLISH), any()))
+        when(jcrTemplate.doExecuteWithSystemSessionAsUser(isNull(), eq("live"), eq(Locale.ENGLISH), any()))
                 .thenThrow(new RepositoryException("boom"));
 
         assertThatThrownBy(this::build).isInstanceOf(RepositoryException.class);
+    }
+
+    // ---------------------------------------------------------------- Jahia publication and live integrity
+
+    @Test
+    @DisplayName("advisories are read from LIVE: an edit not yet published does not change the feed")
+    void readsLiveWorkspace() throws Exception {
+        JCRNodeWrapper advisory = advisory("pub", "JSA-2026-0020", "low", "jcontent@3.8.2");
+        booleanProperty(advisory, "published", true);
+        advisoriesFolder(advisory);
+        JCRNodeWrapper edited = advisory("pub", "JSA-2026-0020", "critical", "jcontent@3.8.2");
+        booleanProperty(edited, "published", false);
+        doReturn(edited).when(editSession).getNodeByIdentifier("id-pub");
+
+        JsonNode advisories = build().get("advisories");
+
+        assertThat(advisories).extracting(a -> a.get("severity").asText()).containsExactly("low");
+        verify(editSession, never()).getNode(anyString());
+    }
+
+    @Test
+    @DisplayName("an advisory unpublished in Jahia (live j:published=false) is not listed, even with its box checked")
+    void unpublishedInJahiaIsSkipped() throws Exception {
+        JCRNodeWrapper unpublished = advisory("off", "JSA-2026-0021", "high", "jcontent@3.8.2");
+        booleanProperty(unpublished, "published", true);
+        booleanProperty(unpublished, "j:published", false);
+        JCRNodeWrapper published = advisory("on", "JSA-2026-0022", "high", "jcontent@3.8.2");
+        booleanProperty(published, "published", true);
+        booleanProperty(published, "j:published", true);
+        advisoriesFolder(unpublished, published);
+
+        assertThat(build().get("advisories")).extracting(a -> a.get("id").asText()).containsExactly("JSA-2026-0022");
+    }
+
+    @Test
+    @DisplayName("an advisory not published in Jahia is absent from live, so it is not listed")
+    void notInLiveIsNotListed() throws Exception {
+        advisoriesFolder();
+
+        assertThat(build().get("advisories")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an advisory changed in live (jmix:liveProperties) is ignored")
+    void liveChangedAdvisoryIgnored() throws Exception {
+        JCRNodeWrapper advisory = advisory("tampered", "JSA-2026-0023", "low", "jcontent@3.8.2");
+        booleanProperty(advisory, "published", true);
+        when(advisory.isNodeType("jmix:liveProperties")).thenReturn(true);
+        advisoriesFolder(advisory);
+
+        assertThat(build().get("advisories")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an advisory created in live (j:originWS=live) is ignored")
+    void liveCreatedAdvisoryIgnored() throws Exception {
+        JCRNodeWrapper advisory = advisory("planted", "JSA-2026-0024", "critical", "jahia-core@9.9.9.9");
+        booleanProperty(advisory, "published", true);
+        stringProperty(advisory, "j:originWS", "live");
+        advisoriesFolder(advisory);
+
+        assertThat(build().get("advisories")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an advisory published from edit (j:originWS=default) is listed")
+    void editOriginAdvisoryListed() throws Exception {
+        JCRNodeWrapper advisory = advisory("fine", "JSA-2026-0025", "low", "jcontent@3.8.2");
+        booleanProperty(advisory, "published", true);
+        stringProperty(advisory, "j:originWS", "default");
+        advisoriesFolder(advisory);
+
+        assertThat(build().get("advisories")).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("an advisory with no counterpart in the edit workspace (live-only node) is ignored")
+    void liveOnlyAdvisoryIgnored() throws Exception {
+        JCRNodeWrapper advisory = advisory("orphan", "JSA-2026-0026", "critical", "jahia-core@9.9.9.9");
+        booleanProperty(advisory, "published", true);
+        advisoriesFolder(advisory);
+        when(editSession.getNodeByIdentifier("id-orphan")).thenThrow(new ItemNotFoundException());
+
+        assertThat(build().get("advisories")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an advisory whose translation was changed in live (jmix:liveProperties) is ignored")
+    void liveChangedTranslationIgnored() throws Exception {
+        JCRNodeWrapper advisory = advisory("i18n", "JSA-2026-0027", "low", "jcontent@3.8.2");
+        booleanProperty(advisory, "published", true);
+        Node translation = translation("tr-1");
+        when(translation.isNodeType("jmix:liveProperties")).thenReturn(true);
+        translations(advisory, translation);
+        advisoriesFolder(advisory);
+
+        assertThat(build().get("advisories")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an advisory whose translation was created in live (j:originWS=live) is ignored")
+    void liveCreatedTranslationIgnored() throws Exception {
+        JCRNodeWrapper advisory = advisory("i18n2", "JSA-2026-0028", "low", "jcontent@3.8.2");
+        booleanProperty(advisory, "published", true);
+        Node translation = translation("tr-2");
+        Property origin = mock(Property.class);
+        when(origin.getString()).thenReturn("live");
+        when(translation.hasProperty("j:originWS")).thenReturn(true);
+        when(translation.getProperty("j:originWS")).thenReturn(origin);
+        translations(advisory, translation);
+        advisoriesFolder(advisory);
+
+        assertThat(build().get("advisories")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an advisory whose translation exists only in live is ignored")
+    void liveOnlyTranslationIgnored() throws Exception {
+        JCRNodeWrapper advisory = advisory("i18n3", "JSA-2026-0029", "low", "jcontent@3.8.2");
+        booleanProperty(advisory, "published", true);
+        translations(advisory, translation("tr-3"));
+        advisoriesFolder(advisory);
+        when(editSession.getNodeByIdentifier("tr-3")).thenThrow(new ItemNotFoundException());
+
+        assertThat(build().get("advisories")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an advisory whose translations were published from edit is listed")
+    void publishedTranslationListed() throws Exception {
+        JCRNodeWrapper advisory = advisory("i18n4", "JSA-2026-0030", "low", "jcontent@3.8.2");
+        booleanProperty(advisory, "published", true);
+        translations(advisory, translation("tr-4"));
+        advisoriesFolder(advisory);
+
+        assertThat(build().get("advisories")).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("an invalid advisory ignored as changed in live does not fail the feed")
+    void invalidLiveChangedAdvisoryIgnoredNotFatal() throws Exception {
+        JCRNodeWrapper advisory = advisory("bad-live", "JSA-2026-0031", "urgent", "nonsense");
+        booleanProperty(advisory, "published", true);
+        when(advisory.isNodeType("jmix:liveProperties")).thenReturn(true);
+        advisoriesFolder(advisory);
+
+        assertThat(build().get("advisories")).isEmpty();
     }
 
     // ---------------------------------------------------------------- owner-flagged versions
@@ -326,15 +483,40 @@ class SecurityFeedTest {
         when(node.getName()).thenReturn(name);
         when(node.getDisplayableName()).thenReturn(name);
         when(node.isNodeType("jnt:forgeSecurityAdvisory")).thenReturn(true);
+        when(node.getIdentifier()).thenReturn("id-" + name);
+        when(node.getPath()).thenReturn(ADVISORIES + "/" + name);
+        translations(node);
         stringProperty(node, "advisoryId", id);
         stringProperty(node, "severity", severity);
         multiProperty(node, "fixedIn", fixedIn);
         return node;
     }
 
+    /** Stubs the advisory's {@code j:translation_*} children, as returned by getI18Ns(). */
+    private static void translations(JCRNodeWrapper advisory, Node... translations) throws Exception {
+        List<Node> list = Arrays.asList(translations);
+        when(advisory.getI18Ns()).thenAnswer(inv -> nodeIterator(list));
+    }
+
+    private static NodeIterator nodeIterator(List<Node> list) {
+        Iterator<Node> it = list.iterator();
+        NodeIterator wrapper = mock(NodeIterator.class);
+        when(wrapper.hasNext()).thenAnswer(inv -> it.hasNext());
+        when(wrapper.nextNode()).thenAnswer(inv -> it.next());
+        when(wrapper.next()).thenAnswer(inv -> it.next());
+        return wrapper;
+    }
+
+    private static Node translation(String identifier) throws Exception {
+        Node node = mock(Node.class);
+        when(node.getIdentifier()).thenReturn(identifier);
+        when(node.getPath()).thenReturn(ADVISORIES + "/x/j:translation_en");
+        return node;
+    }
+
     private void advisoriesFolder(JCRNodeWrapper... advisories) throws Exception {
         JCRNodeWrapper folder = folder("security-advisories", advisories);
-        doReturn(folder).when(editSession).getNode(ADVISORIES);
+        doReturn(folder).when(liveAdvisorySession).getNode(ADVISORIES);
     }
 
     private static JCRNodeWrapper module(String name, String groupId, boolean published) throws Exception {
