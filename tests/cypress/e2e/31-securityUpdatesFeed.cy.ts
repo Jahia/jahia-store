@@ -1,5 +1,6 @@
 import {DocumentNode} from 'graphql';
 import {
+    addUserToGroup,
     createSite,
     createUser,
     deleteSite,
@@ -328,6 +329,13 @@ describe('Security updates feed (securityUpdates.json)', () => {
         });
 
         it('a developer granted directly in live (no publication) is locked out at once', () => {
+            // A grant made only in live gives no API access by itself: Jahia's AclListener maintains the
+            // site-privileged group from edit-workspace ACL changes only, and the security filter's graphql
+            // scope requires privileged_user (jcr:read_default on /sites). A live-only store-developer is
+            // therefore a user already privileged on the site through another role; joining site-privileged
+            // here gives exactly that, and no write anywhere (the privileged role only reads).
+            cy.login();
+            addUserToGroup(DEV3, 'site-privileged', siteKey);
             errorsAs(null, grantNodeRoles, {
                 workspace: 'LIVE', pathOrId: sitePath, principalType: 'USER', principalName: DEV3, roleNames: ['store-developer']
             }).should('have.length', 0);
@@ -347,18 +355,19 @@ describe('Security updates feed (securityUpdates.json)', () => {
             advisoryIds().should('not.include', 'JSA-2026-9010');
         });
 
-        // Skipped: store-administrator (jahiaForgeModerateModule jahiaForgeUploadModule jcr:all_live
-        // jcr:all_default) does not hold Jahia's "publish" permission, a sibling of jcr:all_default and
-        // jcr:all_live under /permissions/repository-permissions, not part of either. Jahia's publication
-        // (ComplexPublicationService.publish, JCRPublicationService.publish with checkPermissions) skips
-        // nodes where hasPermission("publish") is false, so the mutation answers true and publishes nothing.
-        // Adding the permission to the role is a product decision, pending.
-        it.skip('a store administrator publishes the advisory, which is then listed', () => {
+        it('a store administrator publishes the advisory, which is then listed', () => {
+            // Negative first: created and edited, not published, so absent (asserted by the previous test too).
+            advisoryIds().should('not.include', 'JSA-2026-9010');
+
+            // The store-administrator role holds Jahia's "publish" permission since 5.2.0; without it the publication
+            // silently skips the node (the mutation still answers true), so the feed is the real check.
             cy.apolloClient(storeAdminCreds, {log: true, setCurrentApolloClient: false})
-                .apollo({mutation: publishNodeWithOptions, variables: {pathOrId: advisoryPath('jsa-2026-9010'), languages: ['en'], publishSubNodes: true, includeSubTree: true}});
+                .apollo({mutation: publishNodeWithOptions, errorPolicy: 'all', variables: {pathOrId: advisoryPath('jsa-2026-9010'), languages: ['en'], publishSubNodes: true, includeSubTree: true}})
+                .then(res => expect(res.errors || [], 'publication errors').to.have.length(0));
             cy.login();
             waitAllJobsFinished('Publication of the advisory by the store administrator', 60000);
             advisoryIds().should('include', 'JSA-2026-9010');
+            severityOf('JSA-2026-9010').should('equal', 'high');
         });
     });
 
