@@ -29,6 +29,8 @@ import {
  *     forge { grantRole } mutation, or directly in live. They keep their write access elsewhere;
  *   - second line of defence: an advisory written directly in live (Jahia's jmix:liveProperties or
  *     j:originWS=live markers) is ignored, even when the writer is allowed to write there (root here);
+ *   - the optional introducedIn values (first affected version, one per component of fixedIn) are served
+ *     as fixes[].introducedVersion; a malformed value is refused at write time;
  *   - owner-flagged versions (securityFix) follow moduleList.json visibility: published modules and
  *     published versions only.
  *
@@ -81,7 +83,7 @@ describe('Security updates feed (securityUpdates.json)', () => {
     type Advisory = {
         id: string; title: string; severity: string; cvss?: number; cves: string[]; url?: string;
         published?: string; summary?: string;
-        fixes: Array<{ component: string; groupId?: string; fixedVersions: string[] }>;
+        fixes: Array<{ component: string; groupId?: string; fixedVersions: string[]; introducedVersion?: string }>;
     };
     type Feed = {
         schemaVersion: number;
@@ -402,6 +404,52 @@ describe('Security updates feed (securityUpdates.json)', () => {
             errorsAs(null, addNodeInWorkspace, addAdvisoryVars('LIVE', 'jsa-2026-9012', advisoryProps('JSA-2026-9012', 'critical', ['jahia-core@9.9.9.9'])))
                 .should('have.length', 0);
             advisoryIds().should('not.include', 'JSA-2026-9012').and('include', 'JSA-2026-9001');
+        });
+    });
+
+    describe('introducedIn: the first version of a component that has the flaw', () => {
+        it('serves introducedVersion on the fix of the component it names, and only there', () => {
+            errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', 'jsa-2026-9013', [
+                ...advisoryProps('JSA-2026-9013', 'high', [
+                    'graphql-dxm-provider@3.10.0',
+                    'org.jahia.modules:graphql-dxm-provider@2.24.0',
+                    'jahia-core@8.2.3.7'
+                ]),
+                {name: 'introducedIn', values: ['org.jahia.modules:graphql-dxm-provider@2.0.0']}
+            ])).should('have.length', 0);
+            publishAdvisory('jsa-2026-9013');
+
+            fetchFeedAnonymously().then(feed => {
+                const a = feed.advisories.find(x => x.id === 'JSA-2026-9013');
+                expect(a, 'advisory JSA-2026-9013 listed').to.not.equal(undefined);
+                expect(a!.fixes).to.deep.equal([
+                    {
+                        component: 'graphql-dxm-provider',
+                        groupId: 'org.jahia.modules',
+                        fixedVersions: ['3.10.0', '2.24.0'],
+                        introducedVersion: '2.0.0'
+                    },
+                    {component: 'jahia-core', fixedVersions: ['8.2.3.7']}
+                ]);
+                // Control: an advisory without introducedIn has no introducedVersion in any fix.
+                const plain = feed.advisories.find(x => x.id === 'JSA-2026-9001')!;
+                plain.fixes.forEach(fix => expect(fix).to.not.have.property('introducedVersion'));
+            });
+        });
+
+        it('refuses a malformed introducedIn value at write time (CND constraint)', () => {
+            const withIntroducedIn = (value: string) => [
+                ...advisoryProps('JSA-2026-9014', 'high', ['jahia-core@8.2.3.9'], false),
+                {name: 'introducedIn', values: [value]}
+            ];
+            // Positive control: the same advisory with a valid value is accepted.
+            errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', 'good-introduced-in', withIntroducedIn('jahia-core@8.1.0.0')))
+                .should('have.length', 0);
+            // "8.1..0" matters for the same reason as in fixedIn: the feed parser refuses "..".
+            ['../../etc@1.0', 'jahia-core@8.1..0', 'jahia-core'].forEach((value, i) => {
+                errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', `bad-introduced-in-${i}`, withIntroducedIn(value)))
+                    .should('have.length.greaterThan', 0);
+            });
         });
     });
 
