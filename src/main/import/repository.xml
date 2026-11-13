@@ -78,6 +78,14 @@
                                           text="Service Pack"/>
                     </simple-text-1>
                 </modules-release-type>
+                <security-advisories jcr:mixinTypes="jmix:accessControlled"
+                                     jcr:primaryType="jnt:contentFolder">
+                    <j:acl j:inherit="true" jcr:primaryType="jnt:acl"/>
+                    <j:translation_en jcr:language="en"
+                                      jcr:mixinTypes="mix:title"
+                                      jcr:primaryType="jnt:translation"
+                                      jcr:title="Security advisories"/>
+                </security-advisories>
             </contents>
             <templates j:rootTemplatePath="/base" jcr:primaryType="jnt:templatesFolder">
                 <files jcr:primaryType="jnt:folder"/>

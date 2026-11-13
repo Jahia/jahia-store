@@ -1,0 +1,23 @@
+# Same as addNodeWithProperties, but with the workspace as a variable: 31-securityUpdatesFeed creates
+# nodes directly in LIVE as a store developer, the way the store front-end writes.
+mutation AddNodeInWorkspace(
+    $workspace: Workspace!
+    $parentPath: String!
+    $name: String!
+    $primaryNodeType: String!
+    $properties: [InputJCRProperty]
+) {
+    jcr(workspace: $workspace) {
+        addNode(
+            parentPathOrId: $parentPath
+            name: $name
+            primaryNodeType: $primaryNodeType
+            properties: $properties
+        ) {
+            node {
+                uuid
+                path
+            }
+        }
+    }
+}

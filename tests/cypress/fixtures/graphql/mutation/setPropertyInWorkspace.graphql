@@ -1,0 +1,14 @@
+mutation SetPropertyInWorkspace(
+    $workspace: Workspace!
+    $pathOrId: String!
+    $name: String!
+    $value: String!
+) {
+    jcr(workspace: $workspace) {
+        mutateNode(pathOrId: $pathOrId) {
+            mutateProperty(name: $name) {
+                setValue(value: $value)
+            }
+        }
+    }
+}
