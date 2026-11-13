@@ -156,10 +156,10 @@
 // fixedIn: one entry per fixed component and line, "[groupId:]component@version", for example
 // "graphql-dxm-provider@3.10.0", "org.jahia.modules:graphql-dxm-provider@2.24.0" or "jahia-core@8.2.3.7".
 [jnt:forgeSecurityAdvisory] > jnt:content, mix:title, jmix:forge
- - advisoryId (string) mandatory < '^(JSA-[0-9]{4}-[0-9]{4}([.][0-9]+)?|CVE-[0-9]{4}-[0-9]{4,}|GHSA(-[23456789cfghjmpqrvwx]{4}){3})$'
+ - advisoryId (string) mandatory < '^(JSA-[0-9]{4}-[0-9]{4}|CVE-[0-9]{4}-[0-9]{4,}|GHSA(-[23456789cfghjmpqrvwx]{4}){3})$'
  - severity (string, choicelist[resourceBundle]) mandatory < 'low', 'medium', 'high', 'critical'
  - cvss (double) < '[0,10]'
- - cves (string) multiple < '^CVE-[0-9]{4}-[0-9]{4,}$'
+ - cves (string) multiple < '^(CVE-[0-9]{4}-[0-9]{4,}|JSA-[0-9]{4}-[0-9]{4}([.][0-9]+)?)$'
  - advisoryUrl (string) < '^https://[^ ]+$'
  - publishedDate (date)
  - summary (string, textarea) i18n

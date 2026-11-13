@@ -275,15 +275,21 @@ describe('Security updates feed (securityUpdates.json)', () => {
 
     it('refuses a malformed fixedIn value at write time (CND constraint)', () => {
         cy.login();
-        // Positive control: the same advisory with a valid value is accepted. The identifier carries the
-        // numeric suffix the security team uses (JSA-YYYY-NNNN.NNNN).
-        errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', 'good-fixed-in', advisoryProps('JSA-2026-0036.1066', 'high', ['jahia-core@8.2.3.9'], false)))
-            .should('have.length', 0);
-        // A malformed identifier suffix is refused.
-        ['JSA-2026-0036.', 'JSA-2026-0036.10a'].forEach((id, i) => {
-            errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', `bad-id-${i}`, advisoryProps(id, 'high', ['jahia-core@8.2.3.9'], false)))
-                .should('have.length.greaterThan', 0);
+        // Positive control: the same advisory with a valid value is accepted, its vulnerabilities given as
+        // Jahia vulnerability identifiers (JSA-YYYY-NNNN.NNNN), as the security team writes them.
+        errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', 'good-fixed-in', [
+            ...advisoryProps('JSA-2026-9006', 'high', ['jahia-core@8.2.3.9'], false),
+            {name: 'cves', values: ['JSA-2026-0036.1066', 'CVE-2026-1234']}
+        ])).should('have.length', 0);
+        // Refused: a malformed vulnerability identifier, and a suffix on the advisory identifier itself.
+        ['JSA-2026-0036.', 'JSA-2026-0036.10a'].forEach((cve, i) => {
+            errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', `bad-cve-${i}`, [
+                ...advisoryProps('JSA-2026-9006', 'high', ['jahia-core@8.2.3.9'], false),
+                {name: 'cves', values: [cve]}
+            ])).should('have.length.greaterThan', 0);
         });
+        errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', 'bad-advisory-id', advisoryProps('JSA-2026-0036.1066', 'high', ['jahia-core@8.2.3.9'], false)))
+            .should('have.length.greaterThan', 0);
         // "8.2..3" matters: the feed parser refuses "..", so the CND must refuse it too, or a published
         // advisory would pass jContent and then fail the whole feed.
         ['../../etc@1.0', 'jahia-core@8.2..3', 'jahia-core'].forEach((value, i) => {
