@@ -30,6 +30,14 @@
     the module denies the `store-developer` role on the advisories folder to each user and group
     that holds it on the site, and keeps this up to date. Store developers keep their write access
     elsewhere in the site. An advisory written directly in live is ignored.
+  - Optional *Introduced in* property on advisories (`introducedIn`): the first version of a
+    component that has the problem, written like `fixedIn` (`[groupId:]component@version`), one
+    value per component listed in `fixedIn`. The feed adds it to that component's fix as
+    `introducedVersion`, so clients stop reporting the versions below it. Without it, every version
+    below a fixed version counts as affected. The field is optional (`schemaVersion` stays 1). A
+    published advisory whose `introducedIn` is malformed, names a component that is not in `fixedIn`,
+    gives another groupId than `fixedIn`, or has two values for one component makes the feed answer
+    503, as an invalid `fixedIn` does.
   - New optional properties on module versions: `securityFix`, `securitySeverity`,
     `securityReferences` and `securityNote`.
   - `moduleList.json` is unchanged.

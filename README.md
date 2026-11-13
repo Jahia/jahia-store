@@ -46,7 +46,13 @@ issues. It sits next to `moduleList.json`, which it does not change.
     `[groupId:]component@version`. The component is a Store module name, or `jahia-core` for the
     platform. Examples: `graphql-dxm-provider@3.10.0`, `org.jahia.modules:graphql-dxm-provider@2.24.0`,
     `jahia-core@8.2.3.7`.
-  - Optional: `cvss`, `cves`, `advisoryUrl`, `publishedDate`, `summary`.
+  - `introducedIn` (optional): the first version of a component that has the problem, in the same
+    format, at most one value per component. Versions below it are not affected, so clients do not
+    report them. The feed adds it to that component's fix as `introducedVersion`. Each value must name
+    a component listed in `fixedIn`; it may omit the groupId, but when it gives one it must be the
+    groupId of that component's `fixedIn` values. Example: `graphql-dxm-provider@2.0.0`, for a flaw
+    that exists from 2.0.0 and is fixed in 2.24.0 and 3.10.0: a client that runs 1.4.0 is not affected.
+  - Optional: `cvss`, `cves`, `advisoryUrl`, `publishedDate`, `summary`, `introducedIn`.
 - **Flagged versions** (`flaggedVersions`): a module owner can mark a version as containing
   security fixes (`securityFix`, with an optional `securitySeverity`, `securityReferences` and
   `securityNote`). Published versions of published modules only, as in `moduleList.json`. Any store
@@ -59,14 +65,19 @@ issues. It sits next to `moduleList.json`, which it does not change.
                  "cves": ["CVE-2026-1234"], "url": "https://...", "published": "2026-11-03",
                  "summary": "...",
                  "fixes": [{"component": "graphql-dxm-provider", "groupId": "org.jahia.modules",
-                            "fixedVersions": ["3.10.0", "2.24.0"]},
+                            "fixedVersions": ["3.10.0", "2.24.0"], "introducedVersion": "2.0.0"},
                            {"component": "jahia-core", "fixedVersions": ["8.2.3.7"]}]}],
  "flaggedVersions": [{"groupId": "org.jahia.community", "name": "my-module", "version": "1.4.2",
                       "severity": "medium", "references": ["GHSA-..."], "note": "..."}]}
 ```
 
+`introducedVersion` is present only when the advisory has an `introducedIn` value for that component;
+without it, clients treat every version below a fixed version as affected. The field is optional and
+additive: `schemaVersion` stays 1 and older clients ignore it.
+
 The view is not cached. When the repository cannot be read, or when a published advisory is not
-valid, it answers `503` with `{"error": "security feed unavailable"}` rather than a partial or empty
+valid (a malformed `fixedIn` or `introducedIn` value, or an `introducedIn` value that breaks the rules
+above), it answers `503` with `{"error": "security feed unavailable"}` rather than a partial or empty
 feed, which would tell every client that nothing needs fixing.
 
 ## Build & test
