@@ -7,7 +7,8 @@
 ## Must-knows before editing
 
 - **`_dsannotations` in `pom.xml` must list EVERY package holding a `@Component`:**
-  `…graphql.*`, `…actions.*`, `…proxy.*`, `…settings.*`, **and `…filters.*`**.
+  `…graphql.*`, `…actions.*`, `…proxy.*`, `…settings.*`, `…filters.*`, **and `…security.*`**
+  (`AdvisoriesLock` + its listeners).
   It is an explicit allow-list (it replaces bnd's default `*`), so any package left
   out is silently NOT scanned and its `@Component` never registers — this is exactly
   how `PublishedModuleFilter` was left unregistered (draft modules anonymously

@@ -39,9 +39,9 @@ Which packages get DS descriptors generated is controlled by the bnd
 
 - ⚠️ **CRITICAL GOTCHA**: `_dsannotations` is an explicit allow-list that *replaces*
   bnd's default `*`, so it must enumerate **every** package that holds a `@Component`:
-  `org.jahia.modules.forge.graphql.*`, `…actions.*`, `…proxy.*`, `…settings.*`, **and
-  `…filters.*`**. Any package left out is silently NOT scanned and its component never
-  registers. This has bitten the module twice: a past commit narrowed it to
+  `org.jahia.modules.forge.graphql.*`, `…actions.*`, `…proxy.*`, `…settings.*`, `…filters.*`,
+  **and `…security.*`** (the advisories lock and its listeners). Any package left out
+  is silently NOT scanned and its component never registers. This has bitten the module twice: a past commit narrowed it to
   graphql-only (un-registering every `@Component(service=Action.class)`), and
   `filters.*` was missing (so `PublishedModuleFilter` never registered → draft modules
   were anonymously readable, SECURITY-571 #54). Tests that only assert "the form
@@ -110,6 +110,8 @@ src/main/java/org/jahia/modules/forge/
   filters/     PublishedModuleFilter — render filter (@Component service=RenderFilter.class)
   proxy/       MavenProxy — artifact-download servlet (@Component)
   settings/    ForgeSettingsService + ForgeSiteDeletionListener (@Component)
+  security/    securityUpdates.json feed (SecurityFeed, LiveChangeDetector) + AdvisoriesLock and its
+               per-workspace ACL listeners (@Component): store developers locked out of the advisories folder
 src/main/resources/   CND, views, i18n, moduleList rendering
 tests/                Cypress E2E (+ env tooling) — see below
 ```

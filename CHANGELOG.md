@@ -9,15 +9,23 @@
   security fixes, so that Jahia instances can warn their administrators. See the README.
   - New content type *Security advisory* (`jnt:forgeSecurityAdvisory`), created in the
     `contents/security-advisories` folder by store or site administrators. An advisory is listed
-    once its *Published* box is checked; edits apply at once. Store developers cannot write
-    advisories.
+    once it is published in Jahia with its *Published in the security feed* box checked. Edits are
+    listed when the advisory is published again. Unpublish it, or uncheck the box and publish, to
+    withdraw it. Publishing needs Jahia's `publish` permission, which `store-administrator` does
+    not include.
+  - Store developers cannot create, change or delete advisories, in the edit or the live workspace:
+    the module denies the `store-developer` role on the advisories folder to each user and group
+    that holds it on the site, and keeps this up to date. Store developers keep their write access
+    elsewhere in the site. An advisory written directly in live is ignored.
   - New optional properties on module versions: `securityFix`, `securitySeverity`,
     `securityReferences` and `securityNote`.
   - `moduleList.json` is unchanged.
 
   **What to do:** deploy `jahia-store-template` 5.1.0 or later, which creates the
   `security-advisories` folder in new store sites. In an existing store site, create a content
-  folder named `security-advisories` under `contents` before adding the first advisory.
+  folder named `security-advisories` under `contents` before adding the first advisory, and publish
+  it. The module locks the folder as soon as it is created, and again at each module start and each
+  role change.
 
 ## 5.1.2 (2026-09-23)
 

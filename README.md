@@ -19,11 +19,24 @@ Its website and in-site administration UI are provided by the sibling
 issues. It sits next to `moduleList.json`, which it does not change.
 
 - **Advisories** (`advisories`): a store or site administrator creates a *Security advisory* in the
-  site's `contents/security-advisories` folder in jContent, and checks its **Published** box.
-  - The feed lists an advisory as soon as its box is checked; Jahia publication plays no part.
-    Edits apply at once, and an advisory leaves the feed only when you uncheck the box or delete it.
-  - Store administrators and site administrators can write advisories. Store developers cannot:
-    their role only writes the live workspace, and the feed reads advisories from the edit workspace.
+  site's `contents/security-advisories` folder in jContent, checks its **Published in the security
+  feed** box, and publishes the advisory in Jahia.
+  - The feed reads advisories from the live workspace. It lists an advisory only when it is published
+    in Jahia **and** its box is checked in the published version. An edit changes nothing until you
+    publish the advisory again. To withdraw an advisory, unpublish it, or uncheck the box and publish.
+  - Publishing needs Jahia's `publish` permission. The `store-administrator` role does not include it,
+    so a store administrator can write advisories but someone with `publish` on the site (a site
+    administrator, for example) must publish them.
+  - Store developers cannot create, change or delete anything in the advisories folder, in the edit
+    or the live workspace. The module puts a DENY of the `store-developer` role on the folder for each
+    user and group that has this role on the site. Store developers keep their write access in the rest
+    of the site. Store and site administrators keep their rights in the folder.
+  - The module updates this lock when it starts, when the store's role administration grants or revokes
+    `store-developer`, when the ACL of the site changes by other means, and when the folder is created.
+  - An advisory written directly in the live workspace instead of being published from edit is
+    ignored, and the module logs a warning. Jahia marks such content (`jmix:liveProperties`,
+    `j:originWS=live`) and keeps the mark when the advisory is published again. To list it again,
+    delete the advisory, publish the deletion, and create and publish a new one.
   - `advisoryId`: `JSA-YYYY-NNNN`, a CVE or a GHSA identifier.
   - `cves`: the vulnerabilities the advisory covers, as CVE identifiers or Jahia vulnerability identifiers
     `JSA-YYYY-NNNN.NNNN` (for example `JSA-2026-0036.1066`). A module version's `securityReferences` accept
