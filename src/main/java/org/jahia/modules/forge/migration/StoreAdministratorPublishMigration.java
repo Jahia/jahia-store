@@ -1,13 +1,10 @@
 package org.jahia.modules.forge.migration;
 
-import org.apache.jackrabbit.core.fs.FileSystem;
 import org.jahia.api.Constants;
 import org.jahia.services.content.JCRNodeWrapper;
 import org.jahia.services.content.JCRSessionWrapper;
 import org.jahia.services.content.JCRTemplate;
-import org.jahia.services.content.JCRValueWrapper;
 import org.jahia.services.content.RBACUtils;
-import org.jahia.utils.security.AccessManagerUtils;
 import org.osgi.framework.BundleContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -37,7 +34,7 @@ import java.util.Arrays;
  * {@code jmix:nolive}; {@code AccessManagerUtils.findRoleNode} reads them from the edit workspace), so live is
  * not touched. Jahia reads a role's {@code j:permissionNames} first and falls back to its
  * {@code j:permissions} references ({@code AccessManagerUtils.getPrivileges}): the migration edits the list
- * the role actually uses, then flushes Jahia's role-privilege caches.
+ * the role actually uses, then flushes Jahia's role-privilege caches (see {@link RolePermissions}).
  *
  * <p>Idempotent, run at activation in a system session, once per module version (see
  * {@link #activate(BundleContext)}); never fails the activation: an error is logged with the manual fix.
@@ -48,14 +45,10 @@ public class StoreAdministratorPublishMigration {
     static final String PERMISSION = "publish";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(StoreAdministratorPublishMigration.class);
-    /** No exported platform constant names {@code /roles}; see {@link StoreDeveloperRoleMigration}. */
-    private static final String ROLES_PATH = "/roles";
     private static final String ROLE_NAME = "store-administrator";
-    private static final String ROLE_PATH = ROLES_PATH + FileSystem.SEPARATOR + ROLE_NAME;
+    private static final String ROLE_PATH = RolePermissions.rolePath(ROLE_NAME);
     /** Where Jahia declares the permission: root-permissions.xml, under repository-permissions. */
     private static final String PERMISSION_PATH = "/permissions/repository-permissions/" + PERMISSION;
-    private static final String PERMISSION_NAMES = "j:permissionNames";
-    private static final String PERMISSIONS = "j:permissions";
     private static final String DONE_PREFIX = "store-administrator-publish-done-";
 
     /** What the migration did. */
@@ -127,14 +120,14 @@ public class StoreAdministratorPublishMigration {
         }
         JCRNodeWrapper role = session.getNode(ROLE_PATH);
         boolean added;
-        if (role.hasProperty(PERMISSION_NAMES)) {
-            String[] names = names(role);
+        if (role.hasProperty(RolePermissions.PERMISSION_NAMES)) {
+            String[] names = RolePermissions.names(role);
             String[] updated = withPublish(names);
             added = updated.length != names.length;
             if (added) {
-                role.setProperty(PERMISSION_NAMES, updated);
+                role.setProperty(RolePermissions.PERMISSION_NAMES, updated);
             }
-        } else if (role.hasProperty(PERMISSIONS)) {
+        } else if (role.hasProperty(RolePermissions.PERMISSIONS)) {
             added = RBACUtils.grantPermissionToRole(PERMISSION_PATH, ROLE_PATH, session);
         } else {
             return Outcome.NO_PERMISSION_LIST;
@@ -142,19 +135,8 @@ public class StoreAdministratorPublishMigration {
         if (!added) {
             return Outcome.ALREADY_PRESENT;
         }
-        session.save();
-        AccessManagerUtils.flushPrivilegesInRoles();
-        AccessManagerUtils.flushMatchingPermissions();
+        RolePermissions.saveAndFlush(session);
         return Outcome.ADDED;
-    }
-
-    private static String[] names(JCRNodeWrapper role) throws RepositoryException {
-        JCRValueWrapper[] values = role.getProperty(PERMISSION_NAMES).getValues();
-        String[] names = new String[values.length];
-        for (int i = 0; i < values.length; i++) {
-            names[i] = values[i].getString();
-        }
-        return names;
     }
 
     /**
