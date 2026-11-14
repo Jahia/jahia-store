@@ -53,6 +53,25 @@
   it. The module locks the folder as soon as it is created, and again at each module start and each
   role change.
 
+### Fixed
+
+- **The SEC-366 migration now removes the stale grant from `j:permissionNames`, the list Jahia
+  reads.** The startup migration added in 5.1.2 removed `jcr:modifyAccessControl_live` only from the
+  role's `j:permissions` references. Jahia reads a role's `j:permissionNames` first and uses
+  `j:permissions` only when `j:permissionNames` is absent, and a role imported from `roles.xml` has
+  `j:permissionNames`: on an installation where the 5.1.2 `roles.xml` import did not run (a
+  redeployed snapshot, a failed import, a role changed after the import), the migration found nothing
+  and `store-developer` kept its live ACL authority. The migration now removes the permission from
+  `j:permissionNames` (and from `j:permissions` when present), flushes Jahia's role-privilege caches,
+  and runs at each module start. It logs
+  `SEC-366: removed jcr:modifyAccessControl_live from role store-developer` when it removed something.
+
+  **Who is impacted:** installations that upgraded to 5.1.2 without the `roles.xml` import running.
+  A normal upgrade imports the roles of the new version and was already fixed.
+
+  **What to do:** nothing. If the module logs `SEC-366: could not remove ...`, remove
+  `jcr:modifyAccessControl_live` from `/roles/store-developer` by hand.
+
 ## 5.1.2 (2026-09-23)
 
 Deploy with `jahia-store-template` 5.0.6, which displays the upload date and handles the public edge
