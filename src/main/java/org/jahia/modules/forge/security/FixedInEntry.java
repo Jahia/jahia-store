@@ -10,11 +10,21 @@ import java.util.regex.Pattern;
  * {@code org.jahia.modules:graphql-dxm-provider@2.24.0} or {@code jahia-core@8.2.3.7}. Both properties
  * share the format. The same pattern is enforced by the CND constraint on each property; it is checked
  * again here because the feed must never emit a value a client could misread.
+ * <p>
+ * The version follows the rule of the security-updates client ({@code matching/Versions.isWellFormed}): a
+ * number, then optionally one of {@code . - _ +} followed by a letter or digit, then letters, digits and those
+ * separators; at most {@value #MAX_VERSION_LENGTH} characters; at most {@value #MAX_SEGMENT_DIGITS} digits
+ * in each dot-separated number at its start. A value with ".." is refused as well (stricter than the client).
  */
 public final class FixedInEntry {
 
-    private static final Pattern FORMAT =
-            Pattern.compile("^(?:([A-Za-z0-9_.-]+):)?([A-Za-z0-9_.-]+)@([0-9][A-Za-z0-9_.-]*)$");
+    /** Longest version the client accepts. */
+    static final int MAX_VERSION_LENGTH = 64;
+    /** Most digits the client accepts in one leading numeric segment (so that it fits an int). */
+    static final int MAX_SEGMENT_DIGITS = 9;
+
+    private static final Pattern FORMAT = Pattern.compile(
+            "^(?:([A-Za-z0-9_.-]+):)?([A-Za-z0-9_.-]+)@([0-9]+(?:[-._+][0-9A-Za-z][0-9A-Za-z._+-]*)?)$");
 
     private final String groupId;
     private final String component;
@@ -28,7 +38,8 @@ public final class FixedInEntry {
 
     /**
      * @param value a raw {@code fixedIn} or {@code introducedIn} value
-     * @return the parsed entry, or empty when the value is null, blank, malformed or contains "..".
+     * @return the parsed entry, or empty when the value is null, blank, malformed, contains ".." or has a
+     *         version the security-updates client would refuse.
      */
     public static Optional<FixedInEntry> parse(String value) {
         if (value == null) {
@@ -36,10 +47,35 @@ public final class FixedInEntry {
         }
         String trimmed = value.trim();
         Matcher matcher = FORMAT.matcher(trimmed);
-        if (!matcher.matches() || trimmed.contains("..")) {
+        if (!matcher.matches() || trimmed.contains("..") || !withinClientLimits(matcher.group(3))) {
             return Optional.empty();
         }
         return Optional.of(new FixedInEntry(matcher.group(1), matcher.group(2), matcher.group(3)));
+    }
+
+    /**
+     * The client's limits that {@link #FORMAT} does not express: the length, and the digits of each number
+     * in the leading run of digits and dots (the qualifier after it is not limited).
+     */
+    private static boolean withinClientLimits(String version) {
+        if (version.length() > MAX_VERSION_LENGTH) {
+            return false;
+        }
+        int digits = 0;
+        for (int i = 0; i < version.length(); i++) {
+            char c = version.charAt(i);
+            if (c == '.') {
+                digits = 0;
+            } else if (c >= '0' && c <= '9') {
+                digits++;
+                if (digits > MAX_SEGMENT_DIGITS) {
+                    return false;
+                }
+            } else {
+                return true;
+            }
+        }
+        return true;
     }
 
     /** @return the Maven groupId, or null when the entry names the component only */

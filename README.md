@@ -45,7 +45,10 @@ issues. It sits next to `moduleList.json`, which it does not change.
   - `fixedIn`: one value per fixed component and maintained line, written
     `[groupId:]component@version`. The component is a Store module name, or `jahia-core` for the
     platform. Examples: `graphql-dxm-provider@3.10.0`, `org.jahia.modules:graphql-dxm-provider@2.24.0`,
-    `jahia-core@8.2.3.7`.
+    `jahia-core@8.2.3.7`. The version follows the rule of the security-updates client: a number, then
+    optionally one of `.` `-` `_` `+` followed by a letter or digit, then letters, digits and those
+    separators (`2.24.0`, `1.0.0-SNAPSHOT`, `3.0.0+build`, `2_1`; not `3a` or `3-`), at most 64
+    characters and at most 9 digits per leading number, with no `..`.
   - `introducedIn` (optional): the first version of a component that has the problem, in the same
     format, at most one value per component. Versions below it are not affected, so clients do not
     report them. The feed adds it to that component's fix as `introducedVersion`. Each value must name

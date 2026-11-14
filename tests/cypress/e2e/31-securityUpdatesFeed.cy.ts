@@ -463,8 +463,9 @@ describe('Security updates feed (securityUpdates.json)', () => {
             // Positive control: the same advisory with a valid value is accepted.
             errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', 'good-introduced-in', withIntroducedIn('jahia-core@8.1.0.0')))
                 .should('have.length', 0);
-            // "8.1..0" matters for the same reason as in fixedIn: the feed parser refuses "..".
-            ['../../etc@1.0', 'jahia-core@8.1..0', 'jahia-core'].forEach((value, i) => {
+            // "8.1..0" matters for the same reason as in fixedIn: the feed parser refuses "..". "3a" is a
+            // version the security-updates client refuses as malformed.
+            ['../../etc@1.0', 'jahia-core@8.1..0', 'jahia-core', 'jahia-core@3a'].forEach((value, i) => {
                 errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', `bad-introduced-in-${i}`, withIntroducedIn(value)))
                     .should('have.length.greaterThan', 0);
             });
@@ -513,8 +514,9 @@ describe('Security updates feed (securityUpdates.json)', () => {
         errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', 'bad-advisory-id', advisoryProps('JSA-2026-0036.1066', 'high', ['jahia-core@8.2.3.9'], false)))
             .should('have.length.greaterThan', 0);
         // "8.2..3" matters: the feed parser refuses "..", so the CND must refuse it too, or a published
-        // advisory would pass jContent and then fail the whole feed.
-        ['../../etc@1.0', 'jahia-core@8.2..3', 'jahia-core'].forEach((value, i) => {
+        // advisory would pass jContent and then fail the whole feed. "3a" likewise: the security-updates
+        // client refuses it as a malformed version, so the CND refuses it at write time.
+        ['../../etc@1.0', 'jahia-core@8.2..3', 'jahia-core', 'jahia-core@3a'].forEach((value, i) => {
             errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', `bad-fixed-in-${i}`, advisoryProps('JSA-2026-9006', 'high', [value], false)))
                 .should('have.length.greaterThan', 0);
         });

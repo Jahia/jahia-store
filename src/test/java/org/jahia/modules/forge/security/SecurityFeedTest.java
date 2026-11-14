@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.slf4j.Logger;
 
@@ -223,6 +224,32 @@ class SecurityFeedTest {
                 .hasMessageContaining(ADVISORIES + "/bad").hasMessageContaining("fixedIn");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"jahia-core@3a", "jahia-core@3_", "jahia-core@3-", "jahia-core@1234567890.0",
+            "jahia-core@1.0.0-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
+    @DisplayName("a published advisory with a fixedIn version the client refuses fails the feed")
+    void clientMalformedFixedInVersionFailsLoud(String fixedIn) throws Exception {
+        JCRNodeWrapper advisory = advisory("bad-version", "JSA-2026-0017", "high", "jcontent@3.8.2", fixedIn);
+        when(advisory.getPath()).thenReturn(ADVISORIES + "/bad-version");
+        advisoriesFolder(advisory);
+        booleanProperty(advisory, "published", true);
+
+        assertThatThrownBy(this::build).isInstanceOf(RepositoryException.class)
+                .hasMessageContaining(ADVISORIES + "/bad-version").hasMessageContaining("fixedIn");
+    }
+
+    @Test
+    @DisplayName("fixedIn versions the client accepts are served as written")
+    void clientWellFormedFixedInVersionsServed() throws Exception {
+        publishedAdvisory("ok-versions", "jahia-core@8.2.3.7", "jahia-core@1.0.0-SNAPSHOT", "jahia-core@3.0.0+build",
+                "jahia-core@2_1", "jahia-core@1.0.0-");
+
+        JsonNode fix = build().get("advisories").get(0).get("fixes").get(0);
+
+        assertThat(fix.get("fixedVersions")).extracting(JsonNode::asText)
+                .containsExactly("8.2.3.7", "1.0.0-SNAPSHOT", "3.0.0+build", "2_1", "1.0.0-");
+    }
+
     @Test
     @DisplayName("a published advisory with no fixedIn value fails the feed")
     void noFixedInFailsLoud() throws Exception {
@@ -305,6 +332,11 @@ class SecurityFeedTest {
                 Arguments.of("malformed", new String[]{"graphql-dxm-provider@2..0", "jahia-core@8.1.0.0"},
                         null, "8.1.0.0", "malformed introducedIn value"),
                 Arguments.of("no version", new String[]{"graphql-dxm-provider", "jahia-core@8.1.0.0"},
+                        null, "8.1.0.0", "malformed introducedIn value"),
+                Arguments.of("version the client refuses", new String[]{"graphql-dxm-provider@2a", "jahia-core@8.1.0.0"},
+                        null, "8.1.0.0", "malformed introducedIn value"),
+                Arguments.of("version longer than 64 characters",
+                        new String[]{"graphql-dxm-provider@2.0.0-" + "a".repeat(59), "jahia-core@8.1.0.0"},
                         null, "8.1.0.0", "malformed introducedIn value"),
                 Arguments.of("component absent from fixedIn",
                         new String[]{"jcontent@3.0.0", "graphql-dxm-provider@2.0.0", "jahia-core@8.1.0.0"},

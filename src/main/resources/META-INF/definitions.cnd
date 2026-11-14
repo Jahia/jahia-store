@@ -155,6 +155,9 @@
 // cannot create or change advisories; store and site administrators can. Edits apply at once.
 // fixedIn: one entry per fixed component and line, "[groupId:]component@version", for example
 // "graphql-dxm-provider@3.10.0", "org.jahia.modules:graphql-dxm-provider@2.24.0" or "jahia-core@8.2.3.7".
+// The version follows the security-updates client rule: a number, then optionally one of . - _ + and a
+// letter or digit, then letters, digits and those separators; at most 64 characters; at most 9 digits per
+// leading number; no "..". The constraint applies at write time; existing values are not revalidated.
 // introducedIn (optional): the first version of a component that has the flaw, same format, at most one
 // value per component, naming a component of fixedIn (with no groupId or the same one). Versions below
 // it are not affected. The constraint checks the format only; the feed ignores (and logs) a value that
@@ -168,5 +171,5 @@
  - publishedDate (date)
  - summary (string, textarea) i18n
  - published (boolean) = false autocreated
- - fixedIn (string) mandatory multiple < '^(?!.*[.][.])([A-Za-z0-9_.-]+:)?[A-Za-z0-9_.-]+@[0-9][A-Za-z0-9_.-]*$'
- - introducedIn (string) multiple < '^(?!.*[.][.])([A-Za-z0-9_.-]+:)?[A-Za-z0-9_.-]+@[0-9][A-Za-z0-9_.-]*$'
+ - fixedIn (string) mandatory multiple < '^(?!.*[.][.])([A-Za-z0-9_.-]+:)?[A-Za-z0-9_.-]+@(?=[0-9A-Za-z._+-]{1,64}$)(?![0-9.]*[0-9]{10})[0-9]+([-._+][0-9A-Za-z][0-9A-Za-z._+-]*)?$'
+ - introducedIn (string) multiple < '^(?!.*[.][.])([A-Za-z0-9_.-]+:)?[A-Za-z0-9_.-]+@(?=[0-9A-Za-z._+-]{1,64}$)(?![0-9.]*[0-9]{10})[0-9]+([-._+][0-9A-Za-z][0-9A-Za-z._+-]*)?$'

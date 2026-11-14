@@ -40,6 +40,9 @@
     ignored: that component has no `introducedVersion`, and the module logs a warning with the
     advisory path and the reason. Unlike an invalid `fixedIn`, an invalid `introducedIn` never stops
     the feed.
+  - The version in `fixedIn` and `introducedIn` follows the security-updates client rule (a number, then
+    optionally `.`, `-`, `_` or `+` and a letter or digit; at most 64 characters, 9 digits per leading
+    number): jContent refuses `3a` or `3-`, and the feed treats such a value as malformed.
   - New optional properties on module versions: `securityFix`, `securitySeverity`,
     `securityReferences` and `securityNote`.
   - `moduleList.json` is unchanged.
