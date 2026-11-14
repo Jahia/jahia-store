@@ -1,5 +1,58 @@
 # Changelog
 
+## 5.2.0 (unreleased)
+
+> **For administrators: the `store-administrator` role now has Jahia's `publish` permission.** Store
+> administrators can publish any content of the store site that they can edit, not only security
+> advisories. Before you upgrade, check who holds this role. If you do not want this, remove `publish`
+> from the role in *Administration > Roles and permissions* after the upgrade; store administrators then
+> need someone else, a site administrator for example, to publish their advisories. Do it again after
+> each later upgrade of the module: like any module role, `store-administrator` is reset from the
+> module's `roles.xml` when a new version of the module is installed.
+
+### Added
+
+- **Security updates feed.** `/contents/modules-repository.securityUpdates.json` lists the security
+  advisories published by the security team and the module versions their owners flag as containing
+  security fixes, so that Jahia instances can warn their administrators. See the README.
+  - New content type *Security advisory* (`jnt:forgeSecurityAdvisory`), created in the
+    `contents/security-advisories` folder by store or site administrators. An advisory is listed
+    once it is published in Jahia with its *Published in the security feed* box checked. Edits are
+    listed when the advisory is published again. Unpublish it, or uncheck the box and publish, to
+    withdraw it.
+  - The `store-administrator` role gets Jahia's `publish` permission, so that store administrators
+    can publish the advisories they write. New installations get it from the module's roles. On an
+    existing installation, the module adds it to `/roles/store-administrator` the first time this
+    version starts and logs `Added the publish permission to role store-administrator`. If it logs
+    `Could not add the publish permission to role store-administrator` instead, add `publish` to the
+    role by hand.
+  - Store developers cannot create, change or delete advisories, in the edit or the live workspace:
+    the module denies the `store-developer` role on the advisories folder to each user and group
+    that holds it on the site, and keeps this up to date. Store developers keep their write access
+    elsewhere in the site. An advisory written directly in live is ignored.
+  - Optional *Introduced in* property on advisories (`introducedIn`): the first version of a
+    component that has the problem, written like `fixedIn` (`[groupId:]component@version`), one
+    value per component listed in `fixedIn`. The feed adds it to that component's fix as
+    `introducedVersion`, so clients stop reporting the versions below it. Without it, every version
+    below a fixed version counts as affected. The field is optional (`schemaVersion` stays 1).
+    jContent refuses a malformed value. A value that names a component not in `fixedIn` or gives
+    another groupId than `fixedIn`, and every value of a component that has more than one, are
+    ignored: that component has no `introducedVersion`, and the module logs a warning with the
+    advisory path and the reason. Unlike an invalid `fixedIn`, an invalid `introducedIn` never stops
+    the feed.
+  - The version in `fixedIn` and `introducedIn` follows the security-updates client rule (a number, then
+    optionally `.`, `-`, `_` or `+` and a letter or digit; at most 64 characters, 9 digits per leading
+    number): jContent refuses `3a` or `3-`, and the feed treats such a value as malformed.
+  - New optional properties on module versions: `securityFix`, `securitySeverity`,
+    `securityReferences` and `securityNote`.
+  - `moduleList.json` is unchanged.
+
+  **What to do:** deploy `jahia-store-template` 5.1.0 or later, which creates the
+  `security-advisories` folder in new store sites. In an existing store site, create a content
+  folder named `security-advisories` under `contents` before adding the first advisory, and publish
+  it. The module locks the folder as soon as it is created, and again at each module start and each
+  role change.
+
 ## 5.1.2 (2026-09-23)
 
 Deploy with `jahia-store-template` 5.0.6, which displays the upload date and handles the public edge

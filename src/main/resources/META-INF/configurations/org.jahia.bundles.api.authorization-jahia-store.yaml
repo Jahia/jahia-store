@@ -5,3 +5,8 @@ access-jahia-store-json-views:
     - api: view.json.moduleList
       node:
         nodeType: jnt:contentFolder
+    # securityUpdates.json, read by Jahia instances (see README "Security updates feed"). Without this
+    # grant the security filter answers 404 and the view never runs.
+    - api: view.json.securityUpdates
+      node:
+        nodeType: jnt:contentFolder
