@@ -19,10 +19,11 @@ import {
  *
  * Model under test:
  *   - advisories live in <site>/contents/security-advisories (created by the jahia-store-template site
- *     import). The feed reads them from the LIVE workspace and lists one only when it is published with
- *     Jahia's publication AND its "Published in the security feed" box (`published`) is checked in the
- *     published version. An edit in the edit workspace changes nothing until the advisory is published
- *     again; unpublishing it, or unchecking the box and publishing, withdraws it;
+ *     import). The feed reads them from the LIVE workspace and lists one when it is published with
+ *     Jahia's publication: an edit in the edit workspace changes nothing until the advisory is published
+ *     again, and unpublishing it withdraws it. An advisory marked Work in progress is never published, not
+ *     even by a publication of the whole site or folder. The retired "published" box (still defined, hidden)
+ *     plays no part;
  *   - store developers cannot create, modify or delete anything in the advisories folder, in either
  *     workspace (AdvisoriesLock: a DENY of store-developer on the folder for every granted principal),
  *     whether they were granted before the folder was published, through the store's own
@@ -94,13 +95,15 @@ describe('Security updates feed (securityUpdates.json)', () => {
     type Creds = { username: string; password: string };
     type Workspace = 'EDIT' | 'LIVE';
 
-    const advisoryProps = (id: string, severity: string, fixedIn: string[], published = true) => [
+    const advisoryProps = (id: string, severity: string, fixedIn: string[]) => [
         {name: 'jcr:title', value: `Advisory ${id}`, language: 'en'},
         {name: 'advisoryId', value: id},
         {name: 'severity', value: severity},
-        {name: 'fixedIn', values: fixedIn},
-        {name: 'published', value: String(published)}
+        {name: 'fixedIn', values: fixedIn}
     ];
+
+    /** Jahia's Work in progress, for the whole content (what jContent sets): publication skips the node. */
+    const WORK_IN_PROGRESS = {name: 'j:workInProgressStatus', value: 'ALL_CONTENT'};
 
     const addAdvisoryVars = (workspace: Workspace, name: string, properties: object[]) => ({
         workspace, parentPath: advisoriesPath, name, primaryNodeType: 'jnt:forgeSecurityAdvisory', properties
@@ -163,7 +166,7 @@ describe('Security updates feed (securityUpdates.json)', () => {
         errorsAs(creds, addNodeInWorkspace, addAdvisoryVars(workspace, newName, advisoryProps('JSA-2026-9099', 'critical', ['jahia-core@9.9.9.9'])))
             .should('have.length.greaterThan', 0);
         setAdvisoryProperty(creds, workspace, 'jsa-2026-9001', ['severity', 'low']).should('have.length.greaterThan', 0);
-        setAdvisoryProperty(creds, workspace, 'jsa-2026-9001', ['published', 'false']).should('have.length.greaterThan', 0);
+        setAdvisoryProperty(creds, workspace, 'jsa-2026-9001', ['cvss', '1.0']).should('have.length.greaterThan', 0);
         errorsAs(creds, deleteNodeInWorkspace, {workspace, pathOrId: advisoryPath('jsa-2026-9001')})
             .should('have.length.greaterThan', 0);
     };
@@ -199,7 +202,7 @@ describe('Security updates feed (securityUpdates.json)', () => {
         grantRoles(sitePath, ['store-developer'], DEV, 'USER');
         grantRoles(sitePath, ['store-administrator'], STORE_ADMIN, 'USER');
 
-        // A: box checked, every optional field set. B: same, box unchecked.
+        // A: every optional field set. B: marked Work in progress, so the site's publication leaves it out.
         cy.apollo({
             mutation: addNodeInWorkspace,
             variables: addAdvisoryVars('EDIT', 'jsa-2026-9001', [
@@ -216,7 +219,7 @@ describe('Security updates feed (securityUpdates.json)', () => {
         });
         cy.apollo({
             mutation: addNodeInWorkspace,
-            variables: addAdvisoryVars('EDIT', 'jsa-2026-9002', advisoryProps('JSA-2026-9002', 'critical', ['jahia-core@8.2.3.8'], false))
+            variables: addAdvisoryVars('EDIT', 'jsa-2026-9002', [...advisoryProps('JSA-2026-9002', 'critical', ['jahia-core@8.2.3.8']), WORK_IN_PROGRESS])
         });
 
         // A module with an owner-flagged version, a plain version and a flagged but unpublished version.
@@ -249,7 +252,7 @@ describe('Security updates feed (securityUpdates.json)', () => {
             .its('data.jcr.nodeByPath.primaryNodeType.name').should('eq', 'jnt:contentFolder');
     });
 
-    it('lists a published advisory whose box is checked, not a published one whose box is unchecked', () => {
+    it('lists the advisory published with the site, not the one marked Work in progress, which the publication skipped', () => {
         advisoryIds().should('deep.equal', ['JSA-2026-9001']);
     });
 
@@ -270,7 +273,7 @@ describe('Security updates feed (securityUpdates.json)', () => {
     });
 
     describe('Jahia publication', () => {
-        it('an advisory with its box checked is absent until it is published in Jahia', () => {
+        it('an advisory is absent until it is published in Jahia', () => {
             errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', 'jsa-2026-9003', advisoryProps('JSA-2026-9003', 'medium', ['jcontent@3.8.2'])))
                 .should('have.length', 0);
             advisoryIds().should('not.include', 'JSA-2026-9003');
@@ -287,24 +290,35 @@ describe('Security updates feed (securityUpdates.json)', () => {
             severityOf('JSA-2026-9003').should('equal', 'critical');
         });
 
-        it('unchecking the box withdraws the advisory once published, not before', () => {
+        it('the retired "published" box plays no part: set to false and published, the advisory stays listed', () => {
             setAdvisoryProperty(null, 'EDIT', 'jsa-2026-9003', ['published', 'false']).should('have.length', 0);
-            advisoryIds().should('include', 'JSA-2026-9003');
-
             publishAdvisory('jsa-2026-9003');
-            advisoryIds().should('not.include', 'JSA-2026-9003');
+            advisoryIds().should('include', 'JSA-2026-9003');
         });
 
         it('unpublishing the advisory in Jahia withdraws it', () => {
-            // Positive control: box checked again and published, so it is listed.
-            setAdvisoryProperty(null, 'EDIT', 'jsa-2026-9003', ['published', 'true']).should('have.length', 0);
-            publishAdvisory('jsa-2026-9003');
+            // Positive control: published, so it is listed.
             advisoryIds().should('include', 'JSA-2026-9003');
 
             cy.login();
             unpublishNode(advisoryPath('jsa-2026-9003'), 'en');
             advisoryIds().should('not.include', 'JSA-2026-9003');
             advisoryIds().should('deep.equal', ['JSA-2026-9001']);
+        });
+
+        it('an advisory marked Work in progress is not published, even with its whole folder; once ready, it is', () => {
+            // B has been in Work in progress since the setup, whose publication of the whole site left it out.
+            advisoryIds().should('not.include', 'JSA-2026-9002');
+
+            cy.login();
+            cy.apollo({mutation: publishNodeWithOptions, variables: {pathOrId: advisoriesPath, languages: ['en'], publishSubNodes: true, includeSubTree: true}});
+            waitAllJobsFinished();
+            advisoryIds().should('not.include', 'JSA-2026-9002');
+
+            // Positive control: out of Work in progress and published, it is listed.
+            setAdvisoryProperty(null, 'EDIT', 'jsa-2026-9002', ['j:workInProgressStatus', 'DISABLED']).should('have.length', 0);
+            publishAdvisory('jsa-2026-9002');
+            advisoryIds().should('include', 'JSA-2026-9002');
         });
     });
 
