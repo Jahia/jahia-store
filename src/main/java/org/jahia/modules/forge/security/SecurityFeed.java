@@ -37,12 +37,14 @@ import java.util.TimeZone;
  * <ul>
  *   <li>{@code advisories}: {@code jnt:forgeSecurityAdvisory} nodes under
  *       {@code /sites/<site>/contents/security-advisories} (created by the jahia-store-template site import),
- *       read from the LIVE workspace with a system session. An advisory is listed only when BOTH it is
- *       published with Jahia's publication (it exists in live and its live {@code j:published} is not false)
- *       AND its "Published in the security feed" box ({@code published}) is checked in that published
- *       version. So an edit made in the edit workspace changes nothing until the advisory is published
- *       again; unpublishing it in Jahia, or unchecking the box and publishing, withdraws it; an edit never
- *       withdraws it in between. Store developers cannot write in the folder ({@link AdvisoriesLock}), and
+ *       read from the LIVE workspace with a system session. An advisory is listed when it is published
+ *       with Jahia's publication (it exists in live and its live {@code j:published} is not false). So an
+ *       edit made in the edit workspace changes nothing until the advisory is published again, and
+ *       unpublishing it in Jahia withdraws it; an edit never withdraws it in between. A draft is kept out
+ *       with Jahia's "Work in progress", which publication skips, even when a whole folder or site is
+ *       published. The advisory's former "Published in the security feed" box ({@code published}) is
+ *       retired: still defined (hidden), because Jahia refuses to deploy a definition that drops a
+ *       property, and never read. Store developers cannot write in the folder ({@link AdvisoriesLock}), and
  *       a live node written in live rather than published from edit is ignored
  *       ({@link LiveChangeDetector}).</li>
  *   <li>{@code flaggedVersions}: module versions whose owner set {@code securityFix}, read from the LIVE
@@ -144,12 +146,11 @@ public final class SecurityFeed {
         return advisories;
     }
 
-    /** An advisory, published in Jahia (live j:published not false), with its feed box checked, not deleted. */
+    /** An advisory, published in Jahia (live j:published not false), not deleted. */
     private static boolean isListed(JCRNodeWrapper node) throws RepositoryException {
         return node.isNodeType(ADVISORY_TYPE)
                 && !node.isNodeType(MARKED_FOR_DELETION)
-                && !(node.hasProperty(JAHIA_PUBLISHED) && !node.getProperty(JAHIA_PUBLISHED).getBoolean())
-                && bool(node, PUBLISHED);
+                && !(node.hasProperty(JAHIA_PUBLISHED) && !node.getProperty(JAHIA_PUBLISHED).getBoolean());
     }
 
     private Map<String, Object> toAdvisory(JCRNodeWrapper node) throws RepositoryException {
