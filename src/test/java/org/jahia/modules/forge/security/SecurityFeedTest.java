@@ -139,7 +139,6 @@ class SecurityFeedTest {
         when(advisory.hasProperty("publishedDate")).thenReturn(true);
         when(advisory.getProperty("publishedDate")).thenReturn(date);
         advisoriesFolder(advisory);
-        booleanProperty(advisory, "published", true);
 
         JsonNode a = build().get("advisories").get(0);
 
@@ -163,33 +162,32 @@ class SecurityFeedTest {
     }
 
     @Test
-    @DisplayName("an advisory whose published box is not checked is not emitted")
-    void unpublishedAdvisoryIsSkipped() throws Exception {
-        JCRNodeWrapper draft = advisory("draft", "JSA-2026-0012", "critical", "jahia-core@8.2.3.8");
-        JCRNodeWrapper published = advisory("pub", "JSA-2026-0013", "low", "jcontent@3.8.2");
-        advisoriesFolder(draft, published);
-        booleanProperty(draft, "published", false);
-        booleanProperty(published, "published", true);
+    @DisplayName("Jahia's publication alone lists an advisory: the retired feed box, checked or not, plays no part")
+    void retiredFeedBoxIsIgnored() throws Exception {
+        JCRNodeWrapper unchecked = advisory("unchecked", "JSA-2026-0012", "critical", "jahia-core@8.2.3.8");
+        JCRNodeWrapper checked = advisory("checked", "JSA-2026-0013", "low", "jcontent@3.8.2");
+        advisoriesFolder(unchecked, checked);
+        booleanProperty(unchecked, "published", false);
+        booleanProperty(checked, "published", true);
 
         JsonNode advisories = build().get("advisories");
 
-        assertThat(advisories).extracting(a -> a.get("id").asText()).containsExactly("JSA-2026-0013");
+        assertThat(advisories).extracting(a -> a.get("id").asText()).containsExactlyInAnyOrder("JSA-2026-0012", "JSA-2026-0013");
     }
 
     @Test
-    @DisplayName("an advisory with no published property (created before the box existed) is not emitted")
-    void missingPublishedPropertyIsSkipped() throws Exception {
-        JCRNodeWrapper advisory = advisory("old", "JSA-2026-0018", "low", "jcontent@3.8.2");
+    @DisplayName("an advisory published in Jahia with no feed box at all is listed")
+    void advisoryWithoutFeedBoxIsListed() throws Exception {
+        JCRNodeWrapper advisory = advisory("plain", "JSA-2026-0018", "low", "jcontent@3.8.2");
         advisoriesFolder(advisory);
 
-        assertThat(build().get("advisories")).isEmpty();
+        assertThat(build().get("advisories")).extracting(a -> a.get("id").asText()).containsExactly("JSA-2026-0018");
     }
 
     @Test
     @DisplayName("a published advisory marked for deletion is no longer emitted")
     void markedForDeletionIsSkipped() throws Exception {
         JCRNodeWrapper advisory = advisory("gone", "JSA-2026-0019", "high", "jcontent@3.8.2");
-        booleanProperty(advisory, "published", true);
         when(advisory.isNodeType("jmix:markedForDeletion")).thenReturn(true);
         advisoriesFolder(advisory);
 
@@ -201,7 +199,6 @@ class SecurityFeedTest {
     void optionalFieldsOmitted() throws Exception {
         JCRNodeWrapper advisory = advisory("min", "CVE-2026-9999", "medium", "jcontent@3.8.2");
         advisoriesFolder(advisory);
-        booleanProperty(advisory, "published", true);
 
         JsonNode a = build().get("advisories").get(0);
 
@@ -218,7 +215,6 @@ class SecurityFeedTest {
         JCRNodeWrapper advisory = advisory("bad", "JSA-2026-0014", "high", "jcontent@3.8.2", "jahia-core@8.2..3");
         when(advisory.getPath()).thenReturn(ADVISORIES + "/bad");
         advisoriesFolder(advisory);
-        booleanProperty(advisory, "published", true);
 
         assertThatThrownBy(this::build).isInstanceOf(RepositoryException.class)
                 .hasMessageContaining(ADVISORIES + "/bad").hasMessageContaining("fixedIn");
@@ -232,7 +228,6 @@ class SecurityFeedTest {
         JCRNodeWrapper advisory = advisory("bad-version", "JSA-2026-0017", "high", "jcontent@3.8.2", fixedIn);
         when(advisory.getPath()).thenReturn(ADVISORIES + "/bad-version");
         advisoriesFolder(advisory);
-        booleanProperty(advisory, "published", true);
 
         assertThatThrownBy(this::build).isInstanceOf(RepositoryException.class)
                 .hasMessageContaining(ADVISORIES + "/bad-version").hasMessageContaining("fixedIn");
@@ -255,7 +250,6 @@ class SecurityFeedTest {
     void noFixedInFailsLoud() throws Exception {
         JCRNodeWrapper advisory = advisory("empty", "JSA-2026-0016", "high");
         advisoriesFolder(advisory);
-        booleanProperty(advisory, "published", true);
 
         assertThatThrownBy(this::build).isInstanceOf(RepositoryException.class).hasMessageContaining("fixedIn");
     }
@@ -389,11 +383,11 @@ class SecurityFeedTest {
     }
 
     @Test
-    @DisplayName("an invalid introducedIn on an advisory whose box is not checked is ignored, not an error")
+    @DisplayName("an invalid introducedIn on an advisory unpublished in Jahia is ignored, not an error")
     void invalidIntroducedInOnDraftIgnored() throws Exception {
         JCRNodeWrapper advisory = advisory("draft-intro", "JSA-2026-0033", "high", "jcontent@3.8.2");
         multiProperty(advisory, "introducedIn", "jahia-core@8.1.0.0");
-        booleanProperty(advisory, "published", false);
+        booleanProperty(advisory, "j:published", false);
         advisoriesFolder(advisory);
 
         assertThat(build().get("advisories")).isEmpty();
@@ -404,17 +398,16 @@ class SecurityFeedTest {
     void unknownSeverityFailsLoud() throws Exception {
         JCRNodeWrapper advisory = advisory("sev", "JSA-2026-0015", "urgent", "jcontent@3.8.2");
         advisoriesFolder(advisory);
-        booleanProperty(advisory, "published", true);
 
         assertThatThrownBy(this::build).isInstanceOf(RepositoryException.class).hasMessageContaining("severity");
     }
 
     @Test
-    @DisplayName("an invalid advisory whose published box is not checked is ignored, not an error")
+    @DisplayName("an invalid advisory unpublished in Jahia is ignored, not an error")
     void invalidDraftIgnored() throws Exception {
         JCRNodeWrapper advisory = advisory("draft", "JSA-2026-0017", "urgent", "nonsense");
+        booleanProperty(advisory, "j:published", false);
         advisoriesFolder(advisory);
-        booleanProperty(advisory, "published", false);
 
         assertThat(build().get("advisories")).isEmpty();
     }
@@ -444,10 +437,8 @@ class SecurityFeedTest {
     @DisplayName("advisories are read from LIVE: an edit not yet published does not change the feed")
     void readsLiveWorkspace() throws Exception {
         JCRNodeWrapper advisory = advisory("pub", "JSA-2026-0020", "low", "jcontent@3.8.2");
-        booleanProperty(advisory, "published", true);
         advisoriesFolder(advisory);
         JCRNodeWrapper edited = advisory("pub", "JSA-2026-0020", "critical", "jcontent@3.8.2");
-        booleanProperty(edited, "published", false);
         doReturn(edited).when(editSession).getNodeByIdentifier("id-pub");
 
         JsonNode advisories = build().get("advisories");
@@ -457,13 +448,11 @@ class SecurityFeedTest {
     }
 
     @Test
-    @DisplayName("an advisory unpublished in Jahia (live j:published=false) is not listed, even with its box checked")
+    @DisplayName("an advisory unpublished in Jahia (live j:published=false) is not listed")
     void unpublishedInJahiaIsSkipped() throws Exception {
         JCRNodeWrapper unpublished = advisory("off", "JSA-2026-0021", "high", "jcontent@3.8.2");
-        booleanProperty(unpublished, "published", true);
         booleanProperty(unpublished, "j:published", false);
         JCRNodeWrapper published = advisory("on", "JSA-2026-0022", "high", "jcontent@3.8.2");
-        booleanProperty(published, "published", true);
         booleanProperty(published, "j:published", true);
         advisoriesFolder(unpublished, published);
 
@@ -482,7 +471,6 @@ class SecurityFeedTest {
     @DisplayName("an advisory changed in live (jmix:liveProperties) is ignored")
     void liveChangedAdvisoryIgnored() throws Exception {
         JCRNodeWrapper advisory = advisory("tampered", "JSA-2026-0023", "low", "jcontent@3.8.2");
-        booleanProperty(advisory, "published", true);
         when(advisory.isNodeType("jmix:liveProperties")).thenReturn(true);
         advisoriesFolder(advisory);
 
@@ -493,7 +481,6 @@ class SecurityFeedTest {
     @DisplayName("an advisory created in live (j:originWS=live) is ignored")
     void liveCreatedAdvisoryIgnored() throws Exception {
         JCRNodeWrapper advisory = advisory("planted", "JSA-2026-0024", "critical", "jahia-core@9.9.9.9");
-        booleanProperty(advisory, "published", true);
         stringProperty(advisory, "j:originWS", "live");
         advisoriesFolder(advisory);
 
@@ -504,7 +491,6 @@ class SecurityFeedTest {
     @DisplayName("an advisory published from edit (j:originWS=default) is listed")
     void editOriginAdvisoryListed() throws Exception {
         JCRNodeWrapper advisory = advisory("fine", "JSA-2026-0025", "low", "jcontent@3.8.2");
-        booleanProperty(advisory, "published", true);
         stringProperty(advisory, "j:originWS", "default");
         advisoriesFolder(advisory);
 
@@ -515,7 +501,6 @@ class SecurityFeedTest {
     @DisplayName("an advisory with no counterpart in the edit workspace (live-only node) is ignored")
     void liveOnlyAdvisoryIgnored() throws Exception {
         JCRNodeWrapper advisory = advisory("orphan", "JSA-2026-0026", "critical", "jahia-core@9.9.9.9");
-        booleanProperty(advisory, "published", true);
         advisoriesFolder(advisory);
         when(editSession.getNodeByIdentifier("id-orphan")).thenThrow(new ItemNotFoundException());
 
@@ -526,7 +511,6 @@ class SecurityFeedTest {
     @DisplayName("an advisory whose translation was changed in live (jmix:liveProperties) is ignored")
     void liveChangedTranslationIgnored() throws Exception {
         JCRNodeWrapper advisory = advisory("i18n", "JSA-2026-0027", "low", "jcontent@3.8.2");
-        booleanProperty(advisory, "published", true);
         Node translation = translation("tr-1");
         when(translation.isNodeType("jmix:liveProperties")).thenReturn(true);
         translations(advisory, translation);
@@ -539,7 +523,6 @@ class SecurityFeedTest {
     @DisplayName("an advisory whose translation was created in live (j:originWS=live) is ignored")
     void liveCreatedTranslationIgnored() throws Exception {
         JCRNodeWrapper advisory = advisory("i18n2", "JSA-2026-0028", "low", "jcontent@3.8.2");
-        booleanProperty(advisory, "published", true);
         Node translation = translation("tr-2");
         Property origin = mock(Property.class);
         when(origin.getString()).thenReturn("live");
@@ -555,7 +538,6 @@ class SecurityFeedTest {
     @DisplayName("an advisory whose translation exists only in live is ignored")
     void liveOnlyTranslationIgnored() throws Exception {
         JCRNodeWrapper advisory = advisory("i18n3", "JSA-2026-0029", "low", "jcontent@3.8.2");
-        booleanProperty(advisory, "published", true);
         translations(advisory, translation("tr-3"));
         advisoriesFolder(advisory);
         when(editSession.getNodeByIdentifier("tr-3")).thenThrow(new ItemNotFoundException());
@@ -567,7 +549,6 @@ class SecurityFeedTest {
     @DisplayName("an advisory whose translations were published from edit is listed")
     void publishedTranslationListed() throws Exception {
         JCRNodeWrapper advisory = advisory("i18n4", "JSA-2026-0030", "low", "jcontent@3.8.2");
-        booleanProperty(advisory, "published", true);
         translations(advisory, translation("tr-4"));
         advisoriesFolder(advisory);
 
@@ -578,7 +559,6 @@ class SecurityFeedTest {
     @DisplayName("an invalid advisory ignored as changed in live does not fail the feed")
     void invalidLiveChangedAdvisoryIgnoredNotFatal() throws Exception {
         JCRNodeWrapper advisory = advisory("bad-live", "JSA-2026-0031", "urgent", "nonsense");
-        booleanProperty(advisory, "published", true);
         when(advisory.isNodeType("jmix:liveProperties")).thenReturn(true);
         advisoriesFolder(advisory);
 
@@ -667,10 +647,9 @@ class SecurityFeedTest {
         return node;
     }
 
-    /** A listed advisory (box checked), alone in the advisories folder. */
+    /** A listed advisory (published in Jahia), alone in the advisories folder. */
     private JCRNodeWrapper publishedAdvisory(String name, String... fixedIn) throws Exception {
         JCRNodeWrapper node = advisory(name, "JSA-2026-0032", "high", fixedIn);
-        booleanProperty(node, "published", true);
         advisoriesFolder(node);
         return node;
     }

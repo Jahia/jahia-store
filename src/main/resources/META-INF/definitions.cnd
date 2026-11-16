@@ -150,9 +150,12 @@
 [jnt:forgeUrl] > jnt:content, jmix:siteComponent, jmix:studioOnly
 
 // A security advisory written by the store's security team (Jahia Security Advisory, CVE or GHSA).
-// The securityUpdates feed reads advisories from the EDIT workspace and lists those whose `published`
-// box is checked; Jahia publication plays no part. Store developers hold jcr:write_live only, so they
-// cannot create or change advisories; store and site administrators can. Edits apply at once.
+// The securityUpdates feed reads advisories from the LIVE workspace: Jahia's publication alone lists one,
+// and unpublishing it withdraws it; an edit applies once the advisory is published again. To keep a draft
+// out, mark it "Work in progress": publication skips it, even when the whole folder or site is published.
+// Store developers cannot create or change advisories (AdvisoriesLock); store and site administrators can.
+// `published` is retired: the feed no longer reads it. It stays defined, hidden, because Jahia refuses to
+// deploy a module version whose definition drops a property ("Major change in definition").
 // fixedIn: one entry per fixed component and line, "[groupId:]component@version", for example
 // "graphql-dxm-provider@3.10.0", "org.jahia.modules:graphql-dxm-provider@2.24.0" or "jahia-core@8.2.3.7".
 // The version follows the security-updates client rule: a number, then optionally one of . - _ + and a
@@ -170,6 +173,6 @@
  - advisoryUrl (string) < '^https://[^ ]+$'
  - publishedDate (date)
  - summary (string, textarea) i18n
- - published (boolean) = false autocreated
+ - published (boolean) = false autocreated hidden
  - fixedIn (string) mandatory multiple < '^(?!.*[.][.])([A-Za-z0-9_.-]+:)?[A-Za-z0-9_.-]+@(?=[0-9A-Za-z._+-]{1,64}$)(?![0-9.]*[0-9]{10})[0-9]+([-._+][0-9A-Za-z][0-9A-Za-z._+-]*)?$'
  - introducedIn (string) multiple < '^(?!.*[.][.])([A-Za-z0-9_.-]+:)?[A-Za-z0-9_.-]+@(?=[0-9A-Za-z._+-]{1,64}$)(?![0-9.]*[0-9]{10})[0-9]+([-._+][0-9A-Za-z][0-9A-Za-z._+-]*)?$'
