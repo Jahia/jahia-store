@@ -2200,10 +2200,10 @@ cypress-mailpit@^1.4.0:
   version "1.4.0"
   resolved "https://registry.yarnpkg.com/cypress-mailpit/-/cypress-mailpit-1.4.0.tgz#eaf5a42014181cff6b6da1f8e999794e89a8cb05"
 
-cypress-multi-reporters@^2.0.5:
-  version "2.0.5"
-  resolved "https://registry.yarnpkg.com/cypress-multi-reporters/-/cypress-multi-reporters-2.0.5.tgz#2ef058ac7ea1f03adf368eee47c61d7d4f2644db"
-  integrity sha512-5ReXlNE7C/9/rpDI3z0tAJbPXsTHK7P3ogvUtBntQlmctRQ+sSMts7dIQY5MTb0XfBSge3CuwvNvaoqtw90KSQ==
+cypress-multi-reporters@^2.1.0:
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/cypress-multi-reporters/-/cypress-multi-reporters-2.1.0.tgz#c664fe4ab18840d44e8398710481f053eeb997cc"
+  integrity sha512-QCxLVZPkIRjAykSY8EfWWlVhLVeGh0iAsZpXJhsHbP7mmHN6GGVUPUEhZfLy3FO5kd5bGhmjGsW/YY9h3qADbw==
   dependencies:
     debug "^4.4.0"
     lodash "^4.17.21"
@@ -2227,10 +2227,10 @@ cypress-wait-until@^3.0.1:
   version "3.0.2"
   resolved "https://registry.yarnpkg.com/cypress-wait-until/-/cypress-wait-until-3.0.2.tgz#c90dddfa4c46a2c422f5b91d486531c560bae46e"
 
-cypress@15.21.1:
-  version "15.21.1"
-  resolved "https://registry.yarnpkg.com/cypress/-/cypress-15.21.1.tgz#51653d58fa0e9994a11406aa3df2bee716264f9a"
-  integrity sha512-ogHpHMj0XNlZA5MGzjg8SWHf0eMw9lTwVQRKjpcT1GzNTxNUjwnHA8YCG6nOJ8ThU+XZaUxJgpMYZnJ//8aDaw==
+cypress@15.21.2:
+  version "15.21.2"
+  resolved "https://registry.yarnpkg.com/cypress/-/cypress-15.21.2.tgz#83674deec636145f348e3edf95e2a1d5322dff71"
+  integrity sha512-LcO9+YBGT0zlLd9+mD6/O30S1GcvJqBFTOCQ+uTd3nwFi+fTvogSskE3W/BWgDd/iHFkJzuIun5fcDl1aVLKRQ==
   dependencies:
     "@cypress/request" "^4.0.0"
     "@cypress/xvfb" "^1.2.4"
@@ -4611,10 +4611,10 @@ prettier-linter-helpers@^1.0.0:
   dependencies:
     fast-diff "^1.1.2"
 
-prettier@^3.9.10:
-  version "3.9.10"
-  resolved "https://registry.yarnpkg.com/prettier/-/prettier-3.9.10.tgz#ac378e432f1a7381518f2e080816bbaefa38d585"
-  integrity sha512-skGHTH1Yb9QvaTC4hWnRTzEYtCpApF0UMBPz+t/0ZPzP8ihefo/btKd+QA7pUE0fEwA1SbS/NmhyEcstdXOIdA==
+prettier@^3.10.1:
+  version "3.10.1"
+  resolved "https://registry.yarnpkg.com/prettier/-/prettier-3.10.1.tgz#00b1c1872f9650ec22093d5bdafdca0fe6760f77"
+  integrity sha512-70vp3ZUYoPlFbF9uiTdXHUUCGEIp7d4+6p+8DYbkm2jP7x/3i/paXVF6dopSI3zd/CEitrZN1rc4i85xWmmXlg==
 
 pretty-bytes@^5.6.0:
   version "5.6.0"
