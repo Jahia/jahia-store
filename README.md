@@ -19,11 +19,11 @@ Its website and in-site administration UI are provided by the sibling
 issues. It sits next to `moduleList.json`, which it does not change.
 
 - **Advisories** (`advisories`): a store or site administrator creates a *Security advisory* in the
-  site's `contents/security-advisories` folder in jContent, checks its **Published in the security
-  feed** box, and publishes the advisory in Jahia.
-  - The feed reads advisories from the live workspace. It lists an advisory only when it is published
-    in Jahia **and** its box is checked in the published version. An edit changes nothing until you
-    publish the advisory again. To withdraw an advisory, unpublish it, or uncheck the box and publish.
+  site's `contents/security-advisories` folder in jContent, and publishes it in Jahia.
+  - The feed reads advisories from the live workspace: it lists every advisory published in Jahia. An
+    edit changes nothing until you publish the advisory again. To withdraw an advisory, unpublish it.
+  - To keep a draft out of the feed, mark it **Work in progress**. Jahia does not publish it, not even
+    when you publish the whole folder or site. Remove the mark when it is ready, then publish it.
   - Publishing needs Jahia's `publish` permission. Since 5.2.0 the `store-administrator` role includes
     it, so store administrators publish advisories themselves. **This widens the role: a store
     administrator can now publish any content of the store site that they can edit.**

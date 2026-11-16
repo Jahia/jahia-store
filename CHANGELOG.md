@@ -17,9 +17,9 @@
   security fixes, so that Jahia instances can warn their administrators. See the README.
   - New content type *Security advisory* (`jnt:forgeSecurityAdvisory`), created in the
     `contents/security-advisories` folder by store or site administrators. An advisory is listed
-    once it is published in Jahia with its *Published in the security feed* box checked. Edits are
-    listed when the advisory is published again. Unpublish it, or uncheck the box and publish, to
-    withdraw it.
+    once it is published in Jahia. Edits are listed when the advisory is published again. Unpublish it
+    to withdraw it. Mark a draft *Work in progress* to keep it out: Jahia does not publish it, not even
+    with the whole folder or site.
   - The `store-administrator` role gets Jahia's `publish` permission, so that store administrators
     can publish the advisories they write. New installations get it from the module's roles. On an
     existing installation, the module adds it to `/roles/store-administrator` the first time this
