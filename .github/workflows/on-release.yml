@@ -23,13 +23,13 @@ jobs:
     steps:
       # Providing the SSH PRIVATE of a user part of an admin group
       # is necessary to bypass PR checks
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ssh-key: ${{ secrets.GH_SSH_PRIVATE_KEY_JAHIACI }}
 
       # Setting up the SSH agent to be able to commit back to the repository
       # https://github.com/webfactory/ssh-agent
-      - uses: webfactory/ssh-agent@v0.10.0
+      - uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555 # v0.10.0
         with:
           ssh-private-key: ${{ secrets.GH_SSH_PRIVATE_KEY_JAHIACI }}
 
@@ -43,7 +43,7 @@ jobs:
           git config --system --add safe.directory '*'
           git config --global --add safe.directory '*'
 
-      - uses: jahia/jahia-modules-action/release@v2
+      - uses: jahia/jahia-modules-action/release@0c44b0495f0d9991686e9c8340614da1c6618099 # v2
         name: Release Module
         env:
           NEXUS_INTERNAL_URL: https://devtools.jahia.com/nexus/content/groups/internal/
@@ -57,18 +57,10 @@ jobs:
           nexus_password: ${{ secrets.NEXUS_PASSWORD }}
           mvn_settings_filepath: '.github/maven.settings.xml'
 
-      - uses: jahia/jahia-modules-action/release-publication@v2
+      - uses: jahia/jahia-modules-action/release-publication@0c44b0495f0d9991686e9c8340614da1c6618099 # v2
         name: Publish Module
         with:
           module_id: jahia-store
           release_version: ${{ github.event.release.tag_name }}
           nexus_username: ${{ secrets.NEXUS_USERNAME }}
           nexus_password: ${{ secrets.NEXUS_PASSWORD }}
-
-      # Tmate only starts if any of the previous steps fails.
-      # Be careful since it also means that if a step fails the workflow will
-      # keep running until it reaches the timeout
-      - name: Setup tmate session
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
-        timeout-minutes: 15
