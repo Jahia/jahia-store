@@ -26,6 +26,9 @@ public final class CategorySettingsMutationExtension {
     private static final String JCR_TITLE = "jcr:title";
     private static final String JNT_CATEGORY = "jnt:category";
     private static final String WORKSPACE_DEFAULT = "default";
+    private static final String CURRENT_SEGMENT = ".";
+    private static final String PARENT_SEGMENT = "..";
+    private static final String FORBIDDEN_NAME_CHARS = "/\\:[]|*";
 
     private CategorySettingsMutationExtension() {
     }
@@ -47,9 +50,7 @@ public final class CategorySettingsMutationExtension {
     }
 
     public static String addForgeCategory(final String siteKey, final String name) {
-        if (StringUtils.isBlank(name)) {
-            throw new IllegalArgumentException("Category name must not be blank");
-        }
+        validateCategoryName(name);
 
         return execute(siteKey, session -> {
             final JCRNodeWrapper root = resolveRoot(session, siteKey);
@@ -108,6 +109,29 @@ public final class CategorySettingsMutationExtension {
             session.save();
             return Boolean.TRUE;
         });
+    }
+
+    /**
+     * Require the new category's name to be ONE JCR name segment (JSTORE-SEC-001). {@code addNode}
+     * takes a relative path, so a name such as {@code ../x} or {@code a/b} would create the node
+     * outside the site's root category, in a system session that bypasses ACLs. Refuse the
+     * {@code .} and {@code ..} segments, the JCR path and name delimiters ({@code / : [ ] | *}),
+     * the backslash and control characters.
+     */
+    private static void validateCategoryName(String name) {
+        if (StringUtils.isBlank(name)) {
+            throw new IllegalArgumentException("Category name must not be blank");
+        }
+        if (CURRENT_SEGMENT.equals(name) || PARENT_SEGMENT.equals(name)
+                || StringUtils.containsAny(name, FORBIDDEN_NAME_CHARS)) {
+            throw new IllegalArgumentException(
+                    "Category name must be a single name, without . or .. and without the characters / \\ : [ ] | *");
+        }
+        for (int i = 0; i < name.length(); i++) {
+            if (Character.isISOControl(name.charAt(i))) {
+                throw new IllegalArgumentException("Category name must not contain control characters");
+            }
+        }
     }
 
     /**

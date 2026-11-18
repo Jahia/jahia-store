@@ -10,6 +10,19 @@
 > each later upgrade of the module: like any module role, `store-administrator` is reset from the
 > module's `roles.xml` when a new version of the module is installed.
 
+### Security
+
+- **JSTORE-SEC-001: a category name could create the category outside the store's root category.**
+  `forge.addCategory` passed the name to JCR as a relative path, in a system session, so a store
+  settings administrator could add a node anywhere above the root category with a name such as
+  `../x`. The name must now be a single name: `.`, `..`, the characters `/ \ : [ ] | *` and control
+  characters are refused with an error, and nothing is created.
+
+  **Who is impacted:** installations where a user holds the store settings permission
+  (`siteAdminForgeSettings`) on a site but must not write elsewhere in the repository.
+
+  **What to do:** nothing. Existing categories are not changed.
+
 ### Added
 
 - **Security updates feed.** `/contents/modules-repository.securityUpdates.json` lists the security

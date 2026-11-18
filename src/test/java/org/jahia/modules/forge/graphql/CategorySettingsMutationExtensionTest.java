@@ -7,6 +7,8 @@ import org.jahia.services.content.JCRNodeWrapper;
 import org.jahia.services.content.JCRSessionWrapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.MockedStatic;
 
 import javax.jcr.AccessDeniedException;
@@ -129,5 +131,27 @@ class CategorySettingsMutationExtensionTest {
             declared("assertManagedBySite", JCRSessionWrapper.class, String.class, JCRNodeWrapper.class)
                     .invoke(null, session, "store", child);
         }
+    }
+
+    // ---- JSTORE-SEC-001 S4: addCategory name must be a single JCR name segment -------------
+
+    @ParameterizedTest(name = "addForgeCategory rejects \"{0}\"")
+    @ValueSource(strings = {"..", ".", "../escaped", "a/../../b", "a/b", "/abs", "a[1]", "a]", "a*", "a|b",
+            "ns:local", "a\\b", "tab\tname", "new\nline"})
+    @DisplayName("addForgeCategory rejects a name that is not a single JCR name segment, before any JCR access")
+    void addForgeCategory_pathLikeName_rejected(String name) {
+        // The check must fire before the system-session gate: no JCR or OSGi mock is set up here, so
+        // reaching ForgeSiteAccess would fail with something other than IllegalArgumentException.
+        assertThatThrownBy(() -> CategorySettingsMutationExtension.addForgeCategory("store", name))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Category name");
+    }
+
+    @ParameterizedTest(name = "validateCategoryName accepts \"{0}\"")
+    @ValueSource(strings = {"widgets", "My category", "web-and-mobile", "v1.2", "...dots", "a..b", "Été"})
+    @DisplayName("validateCategoryName accepts an ordinary single-segment name")
+    void validateCategoryName_plainName_accepted(String name) throws Exception {
+        // No exception expected.
+        declared("validateCategoryName", String.class).invoke(null, name);
     }
 }

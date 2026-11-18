@@ -13,6 +13,9 @@ import {createSite, deleteSite, createUser, deleteUser} from '@jahia/cypress';
  *         cannot be granted through {@code forge.grantRole}.
  *   S36 / S25 — a category UUID OUTSIDE the site's root-category subtree is refused by a category
  *         mutation (the system session bypasses ACLs, so the UUID is re-validated).
+ *   JSTORE-SEC-001 S4 — {@code forge.addCategory} refuses a name that is not one JCR name segment
+ *         ({@code ..}, {@code ../x}, {@code a/b}, {@code a[1]}), which would otherwise create the
+ *         node outside the root category in a system session.
  *
  * Identity note (as in 21-permissions): GraphQL identity is the apollo client's Basic-auth header,
  * so an ordinary-user run uses a client built with that user's credentials.
@@ -31,6 +34,7 @@ describe('forge GraphQL — authorization negatives', () => {
     const setRootCategory: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/setRootCategory.graphql');
     const updateForgeCategoryTitles: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/updateForgeCategoryTitles.graphql');
     const addNodeWithProperties: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/addNodeWithProperties.graphql');
+    const addForgeCategory: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/addForgeCategory.graphql');
 
     // Assert a GraphQL op was denied: with errorPolicy 'all' the guard surfaces as a GraphQL error
     // (GqlAccessDeniedException / ForgeSettingsException) rather than data.
@@ -163,5 +167,14 @@ describe('forge GraphQL — authorization negatives', () => {
                     })
                 );
             });
+    });
+
+    it('JSTORE-SEC-001: addCategory refuses a name that is not a single JCR name segment', () => {
+        cy.login();
+        ['..', '../escaped', 'a/b', 'a[1]'].forEach(name => {
+            expectDenied(
+                cy.apollo({mutation: addForgeCategory, variables: {siteKey, name}, errorPolicy: 'all'})
+            );
+        });
     });
 });
