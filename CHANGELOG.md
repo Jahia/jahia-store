@@ -1,6 +1,6 @@
 # Changelog
 
-## 5.2.0 (unreleased)
+## 5.2.0 (2026-11-18)
 
 > **For administrators: the `store-administrator` role now has Jahia's `publish` permission.** Store
 > administrators can publish any content of the store site that they can edit, not only security
