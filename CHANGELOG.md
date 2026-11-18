@@ -69,6 +69,27 @@
   *Store administration > Categories*. Modules keep the categories already assigned to them, but
   the store only offers the children of the new root.
 
+- **JSTORE-SEC-017: only the owner of a module or a store administrator can flag its versions as security
+  fixes.** The security flags of a module version (`securityFix`, `securitySeverity`,
+  `securityReferences`, `securityNote`), which `securityUpdates.json` sends to every Jahia instance,
+  could be written by any store developer on any module, because `store-developer` writes live content
+  in the whole site. A developer could flag, change or unflag the versions of a module they do not own,
+  and the feed did not say who did it. The module now refuses a change of these properties unless the
+  writer holds the `owner` role on the module node (granted to the developer who uploaded the module) or
+  `jahiaForgeModerateModule` there (`store-administrator`). Each accepted change records who made it and
+  when, for audit, in two hidden properties of the version (`securityFlaggedBy`, `securityFlaggedDate`)
+  that only the module sets. The feed does not include them and its format is unchanged.
+
+  **Who is impacted:** stores that run a 5.2.0 snapshot. Released versions do not have the security
+  flags.
+
+  **What changes:** a store developer who uploaded only a version of another developer's module (SEC-381)
+  can no longer flag it; the module owner or a store administrator can. A version flagged before this
+  change has no `securityFlaggedBy`, so the feed does not list it and the module logs
+  `records nobody setting its security flag` with its path: have the owner save its security
+  information again. `jahia-store-template` still shows the security editor to every store developer; a
+  developer who does not own the module gets an error when saving.
+
 ### Added
 
 - **Security updates feed.** `/contents/modules-repository.securityUpdates.json` lists the security
@@ -111,29 +132,6 @@
   folder named `security-advisories` under `contents` before adding the first advisory, and publish
   it. The module locks the folder as soon as it is created, and again at each module start and each
   role change.
-
-### Security
-
-- **JSTORE-SEC-017: only the owner of a module or a store administrator can flag its versions as security
-  fixes.** The security flags of a module version (`securityFix`, `securitySeverity`,
-  `securityReferences`, `securityNote`), which `securityUpdates.json` sends to every Jahia instance,
-  could be written by any store developer on any module, because `store-developer` writes live content
-  in the whole site. A developer could flag, change or unflag the versions of a module they do not own,
-  and the feed did not say who did it. The module now refuses a change of these properties unless the
-  writer holds the `owner` role on the module node (granted to the developer who uploaded the module) or
-  `jahiaForgeModerateModule` there (`store-administrator`). Each accepted change records who made it and
-  when, for audit, in two hidden properties of the version (`securityFlaggedBy`, `securityFlaggedDate`)
-  that only the module sets. The feed does not include them and its format is unchanged.
-
-  **Who is impacted:** stores that run a 5.2.0 snapshot. Released versions do not have the security
-  flags.
-
-  **What changes:** a store developer who uploaded only a version of another developer's module (SEC-381)
-  can no longer flag it; the module owner or a store administrator can. A version flagged before this
-  change has no `securityFlaggedBy`, so the feed does not list it and the module logs
-  `records nobody setting its security flag` with its path: have the owner save its security
-  information again. `jahia-store-template` still shows the security editor to every store developer; a
-  developer who does not own the module gets an error when saving.
 
 ### Fixed
 
