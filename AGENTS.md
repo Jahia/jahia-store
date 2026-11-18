@@ -135,7 +135,10 @@ answers 404). `moduleList.json` still returns JCR paths (`path`): the #55 contra
 
 ```
 src/main/java/org/jahia/modules/forge/
-  actions/     Jahia Actions — CreateEntryFromJar (@Component); ForgeMediaMimeListener; MagicByteImageValidator; ActionSecurityUtils
+  actions/     Jahia Actions — CreateEntryFromJar (@Component) + ArtifactUploadGuard (stored content type and
+               archive signature of uploads); ForgeMediaMimeListener, registered once per workspace by
+               ForgeMediaMimeEditListener / ForgeMediaMimeLiveListener (@Component: store developers write
+               media in LIVE, JSTORE-SEC-012); MagicByteImageValidator; ActionSecurityUtils
   graphql/     GraphQL extensions (ForgeSettings, CategorySettings, ManageRoles)
   filters/     PublishedModuleFilter — render filter (@Component service=RenderFilter.class);
                PublishedFileFilter — /files servlet filter (@Component service=AbstractServletFilter.class)
