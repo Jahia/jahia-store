@@ -13,6 +13,25 @@ authoring (module upload, reviews, …), background jobs, a Maven proxy, the
 Its website and in-site administration UI are provided by the sibling
 **[`jahia-store-template`](../store-template)** JavaScript module.
 
+## Unpublished content
+
+A module, a package and each of their versions have a `published` flag. They are often readable in
+the live workspace before they are published, so the module applies the flag itself, with one rule
+on every path that serves store content: a module, package or version is public only when it and
+everything above it are published (a published version of an unpublished module is not public).
+
+- **Module and package pages**: a draft answers 404, like a page that does not exist. Its owner and
+  administrators (write access) still see it.
+- **`/files`**: the artifact attached to a draft version, or to any version of an unpublished module,
+  answers 404 to anyone who cannot edit the draft.
+- **`/modules/mavenproxy`**: an artifact or `maven-metadata.xml` of an unpublished module or version
+  of the catalogue answers 404 to anyone who cannot edit it. Maven coordinates that the catalogue
+  does not list are served as before.
+- **Feeds** (`moduleList.json`, the RSS feed `feed.xml`, `securityUpdates.json`): list published
+  content only, for every caller, owners included.
+- `moduleList.json` and `securityUpdates.json` are opened to anonymous callers only at a site's
+  `contents/modules-repository` folder, and `securityUpdates.json` answers 404 on any other folder.
+
 ## Security updates feed
 
 `/contents/modules-repository.securityUpdates.json` tells Jahia instances which updates fix security

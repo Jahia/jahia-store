@@ -101,13 +101,38 @@ authenticated users are denied (`GqlAccessDeniedException`). This shapes the API
   (`ForgeQueryExtension`/`ForgeMutationExtension` → `ForgeQuery`/`ForgeMutation` containers),
   rather than flat top-level fields.
 
+## Published-only rule (JSTORE-SEC-005)
+
+Draft store content (`published=false` on a module, package or version) is readable in live like any
+other content, so the module enforces the flag itself. **Every** path that serves store content uses
+the one rule in `visibility/StoreVisibility`: a node is public when no `jmix:forgeElement`,
+`jnt:forgeModuleVersion` or `jnt:forgePackageVersion` at or above it is a draft
+(`isPublished`); `isVisibleToCaller` also lets a caller with `jcr:write` on every draft above see it.
+Only those types are governed (the advisory's retired `published` property is not). Errors fail closed.
+
+| Path | Rule | Draft answer |
+|---|---|---|
+| module/package page (`PublishedModuleFilter`) | `isVisibleToCaller` | `PathNotFoundException` → Jahia's 404, same as a missing node (NOT a redirect: that was an existence oracle) |
+| `/files` (`PublishedFileFilter`) | `isVisibleToCaller` on the node the file servlet would serve | 404 |
+| `/modules/mavenproxy` (`MavenProxy.isDraftArtifact`) | `isVisibleToCaller` on the catalogued module / version the path addresses | 404, no egress |
+| RSS view (`rss/contentFolder.moduleList.jsp`) | `isPublished` (no owner exception: public, cached feed) | not listed |
+| `moduleList.json` / `securityUpdates.json` flagged versions | version AND module `published` (same rule, inline) | not listed |
+
+A new path that serves store content MUST call `StoreVisibility`; do not re-test the `published` flag
+by hand. The anonymous JSON views are granted only on `/sites/[^/]+/contents/modules-repository`
+(`pathPattern`, matched against the whole node path, in `org.jahia.bundles.api.authorization-jahia-store.yaml`; no comma or space in the
+regex, the security filter splits on both), and `SecurityFeed` refuses any other folder (the view
+answers 404). `moduleList.json` still returns JCR paths (`path`): the #55 contract needs them.
+
 ## Directory map
 
 ```
 src/main/java/org/jahia/modules/forge/
   actions/     Jahia Actions — CreateEntryFromJar (@Component); ForgeMediaMimeListener; MagicByteImageValidator; ActionSecurityUtils
   graphql/     GraphQL extensions (ForgeSettings, CategorySettings, ManageRoles)
-  filters/     PublishedModuleFilter — render filter (@Component service=RenderFilter.class)
+  filters/     PublishedModuleFilter — render filter (@Component service=RenderFilter.class);
+               PublishedFileFilter — /files servlet filter (@Component service=AbstractServletFilter.class)
+  visibility/  StoreVisibility — THE published-only rule (no @Component, plain static helper)
   proxy/       MavenProxy — artifact-download servlet (@Component)
   settings/    ForgeSettingsService + ForgeSiteDeletionListener (@Component)
   security/    securityUpdates.json feed (SecurityFeed, LiveChangeDetector) + AdvisoriesLock and its
@@ -174,9 +199,14 @@ build pass. Its file header explains why — read it before editing.
 modules) and, on a world-readable `modules-repository`, serves **anonymous**
 callers while using the site's stored Nexus credentials server-side. That is the
 public-app-store download use case. The authorization gate is therefore
-**repository-level** (can the caller read `…/contents/modules-repository`?), not
-artifact-level — an artifact-level gate was tried and **broke** the jnt:file-less
-proxy download (E2E spec 14), so do **not** re-introduce one.
+**repository-level** (can the caller read `…/contents/modules-repository`?), not an
+allow-list of catalogued artifacts — such an allow-list was tried and **broke** the
+jnt:file-less proxy download (E2E spec 14), so do **not** re-introduce one. The only
+artifact-level rule is a **deny of catalogued drafts** (JSTORE-SEC-005): when the path
+falls under `/<groupId as path>/<name>/` of a catalogue module (found by a query on
+`groupId` in the caller's session), a draft module, or a draft version for
+`/<…>/<name>/<version>/`, answers 404 unless the caller can write it. Uncatalogued
+coordinates are untouched.
 
 The residual is a *confused-deputy on a misconfigured deployment*, not an in-module
 code bug. Operators MUST honour this invariant:

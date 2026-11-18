@@ -10,6 +10,39 @@
 > each later upgrade of the module: like any module role, `store-administrator` is reset from the
 > module's `roles.xml` when a new version of the module is installed.
 
+### Security
+
+- **JSTORE-SEC-005: anonymous visitors reached unpublished store content outside the module page.**
+  The `published` flag of modules, packages and versions was enforced only when the module page was
+  rendered. Other paths ignored it: the module-list RSS feed (`feed.xml`) listed the published
+  versions of unpublished modules with their download links, the artifact of a draft version
+  downloaded from `/files` and from `/modules/mavenproxy`, the module page redirected a draft to the
+  home page (which told anyone that the draft existed), and the anonymous `moduleList.json` and
+  `securityUpdates.json` views were open on every content folder of the repository. Every path now
+  applies the same rule: a module, package or version is public only when it and everything above it
+  are published.
+  - RSS feed: a version is listed only when the version and its module are published, as in
+    `moduleList.json`. It lists no draft, even for its owner.
+  - `/files`: the artifact of a draft version, or of any version of an unpublished module, answers 404
+    to anyone who cannot edit the draft.
+  - `/modules/mavenproxy`: an artifact (or the `maven-metadata.xml`) of an unpublished module or
+    version of the catalogue answers 404 to anyone who cannot edit it. Maven coordinates that the
+    catalogue does not list are still served, as before.
+  - Module and package pages: a draft answers 404, the same answer as a page that does not exist,
+    instead of redirecting to the home page.
+  - `moduleList.json` and `securityUpdates.json` are served only at a site's
+    `contents/modules-repository` folder.
+  - `moduleList.json` is unchanged. It still returns the JCR `path` of the store folder and of each
+    published module: Jahia's module manager needs them.
+
+  **Who is impacted:** every store with unpublished modules or versions in the live workspace.
+
+  **What changes for owners:** module owners and administrators still open their draft pages and
+  download their draft artifacts from `/files` and through the proxy. A visitor who follows an old
+  link to an unpublished module now gets the "page not found" page instead of the home page.
+
+  **What to do:** nothing.
+
 ### Added
 
 - **Security updates feed.** `/contents/modules-repository.securityUpdates.json` lists the security
