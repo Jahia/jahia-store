@@ -543,6 +543,27 @@ describe('Authoring views (JS module)', () => {
         cy.get('[data-screenshot-name="provisioning.yml"]').should('not.exist');
     });
 
+    it('refuses SVG files as icon and screenshot before upload (JSTORE-SEC-012)', () => {
+        cy.visit(moduleRender);
+        cy.get('[data-editor-ready]', {timeout: 20000});
+        cy.contains('button', /edit module/i).click();
+
+        // The icon picker offers rasters only, and a picked SVG is refused with a message naming SVG.
+        cy.get('[data-icon-input]', {timeout: 10000}).should('have.attr', 'accept').and('not.match', /svg|html/i);
+        cy.get('[data-icon-input]').selectFile('cypress/fixtures/evil-markup.svg', {force: true});
+        cy.get('[data-icon-status="error"] [role="alert"]', {timeout: 20000}).should('contain', 'SVG');
+        cy.get('[data-icon-input]').should('have.attr', 'aria-invalid', 'true');
+        cy.contains('button', /upload icon/i).should('be.disabled');
+
+        // The helper openEditorMediaTab opens the editor itself, so start again from a fresh page.
+        cy.visit(moduleRender);
+        openEditorMediaTab();
+        cy.get('[data-screenshot-input]').should('have.attr', 'accept').and('not.match', /svg|html/i);
+        cy.get('[data-screenshot-input]').selectFile('cypress/fixtures/evil-markup.svg', {force: true});
+        cy.get('[data-screenshots-ready] [role="alert"]', {timeout: 20000}).should('contain', 'SVG');
+        cy.get('[data-screenshot-name="evil-markup.svg"]').should('not.exist');
+    });
+
     it('accepts a pasted YouTube URL and stores the extracted video id', () => {
         cy.visit(moduleRender);
         openEditorMediaTab();
