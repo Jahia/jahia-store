@@ -106,6 +106,32 @@ class SecurityFeedTest {
         return JSON.readTree(new SecurityFeed(jcrTemplate, logger).build(repository));
     }
 
+    // ---------------------------------------------------------------- feed root (JSTORE-SEC-005 S6)
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "/sites/store/contents",
+            "/sites/store/contents/other-folder",
+            "/sites/store/contents/modules-repository/org",
+            "/sites/store/contents/x/modules-repository"
+    })
+    @DisplayName("JSTORE-SEC-005 S6: a content folder other than the site's modules-repository serves no feed and reads no advisory")
+    void otherContentFolderServesNoFeed(String folderPath) throws Exception {
+        publishedAdvisory("jsa-2026-0099", "jahia-core@8.2.3.9");
+        when(repository.getPath()).thenReturn(folderPath);
+
+        assertThatThrownBy(this::build).isInstanceOf(RepositoryException.class);
+
+        verify(jcrTemplate, never()).doExecuteWithSystemSessionAsUser(any(), any(), any(), any());
+        assertThat(SecurityFeed.servesFeedAt(repository)).isFalse();
+    }
+
+    @Test
+    @DisplayName("JSTORE-SEC-005 S6: the site's modules-repository serves the feed")
+    void modulesRepositoryServesFeed() throws Exception {
+        assertThat(SecurityFeed.servesFeedAt(repository)).isTrue();
+    }
+
     // ---------------------------------------------------------------- advisories
 
     @Test
@@ -592,14 +618,15 @@ class SecurityFeedTest {
     @Test
     @DisplayName("the query selects published, flagged module versions under the repository, quote-escaped")
     void queryStatement() throws Exception {
-        when(repository.getPath()).thenReturn("/sites/store/contents/o'brien");
+        // The quote sits in the site key: the feed is served only at a site's modules-repository folder.
+        when(repository.getPath()).thenReturn("/sites/o'brien/contents/modules-repository");
         queryReturns();
 
         build();
 
         verify(queryManager).createQuery(statement.capture(), eq(Query.JCR_SQL2));
         assertThat(statement.getValue())
-                .startsWith("SELECT * FROM [jnt:forgeModuleVersion] AS v WHERE ISDESCENDANTNODE(v, '/sites/store/contents/o''brien')")
+                .startsWith("SELECT * FROM [jnt:forgeModuleVersion] AS v WHERE ISDESCENDANTNODE(v, '/sites/o''brien/contents/modules-repository')")
                 .contains("v.[securityFix] = true")
                 .contains("v.[published] = true");
     }

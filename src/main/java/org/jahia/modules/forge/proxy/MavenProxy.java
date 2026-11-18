@@ -32,11 +32,14 @@ import org.jahia.data.templates.ModuleReleaseInfo;
 import org.jahia.modules.forge.actions.ActionSecurityUtils;
 import org.jahia.modules.forge.settings.ForgeSettings;
 import org.jahia.modules.forge.settings.ForgeSettingsService;
+import org.jahia.modules.forge.visibility.StoreVisibility;
+import org.jahia.services.content.JCRNodeIteratorWrapper;
+import org.jahia.services.content.JCRNodeWrapper;
 import org.jahia.services.content.JCRSessionFactory;
 import org.jahia.services.content.JCRSessionWrapper;
-import org.jahia.services.sites.JahiaSitesService;
 
 import javax.jcr.RepositoryException;
+import javax.jcr.query.Query;
 import javax.servlet.Servlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -62,8 +65,8 @@ public class MavenProxy extends HttpServlet {
 
     private static final long serialVersionUID = 1L;
     private static final Logger LOGGER = LoggerFactory.getLogger(MavenProxy.class);
-    private static final String SITES_PATH = JahiaSitesService.SITES_JCR_PATH + FileSystem.SEPARATOR;
-    private static final String MODULES_REPOSITORY = "/contents/modules-repository";
+    private static final String MODULE_TYPE = "jnt:forgeModule";
+    private static final String VERSION_TYPE = "jnt:forgeModuleVersion";
 
     private final HttpClientService httpClientService;
     private final ForgeSettingsService forgeSettingsService;
@@ -111,7 +114,8 @@ public class MavenProxy extends HttpServlet {
             // (A blanket "no anonymous" rule used to sit in front of this; it broke downloads on
             // public stores and was redundant with this gate, so it was removed.) The proxy
             // intentionally serves raw Maven coordinates (not only catalogued modules), so the
-            // gate is repository-level, not artifact-level. Residual: a store whose catalogue is
+            // gate is repository-level, not an allow-list of catalogued artifacts; the only
+            // artifact-level rule is the deny of catalogued DRAFTS below. Residual: a store whose catalogue is
             // PUBLIC but whose artifacts must stay private needs a restrictive ACL on its
             // modules-repository node (operational prerequisite).
             if (!callerCanAccessRepository(session, siteName)) {
@@ -119,6 +123,16 @@ public class MavenProxy extends HttpServlet {
                 LOGGER.warn("MavenProxy: caller '{}' is not authorized for site '{}' module repository",
                         ActionSecurityUtils.sanitizeForLog(caller), ActionSecurityUtils.sanitizeForLog(siteName));
                 trySendError(response, HttpServletResponse.SC_FORBIDDEN);
+                return;
+            }
+
+            // Published-only rule (JSTORE-SEC-005): an artifact of a catalogued module or version that is
+            // still a draft answers 404, like a missing artifact, unless the caller can write the draft
+            // (owner preview). Raw coordinates the catalogue does not list are still served (see above).
+            if (isDraftArtifact(session, siteName, path)) {
+                LOGGER.debug("MavenProxy: refused an artifact of a draft store module on site '{}'",
+                        ActionSecurityUtils.sanitizeForLog(siteName));
+                trySendError(response, HttpServletResponse.SC_NOT_FOUND);
                 return;
             }
 
@@ -211,7 +225,77 @@ public class MavenProxy extends HttpServlet {
      */
     private static boolean callerCanAccessRepository(final JCRSessionWrapper session, final String siteName)
             throws RepositoryException {
-        return session.nodeExists(SITES_PATH + siteName + MODULES_REPOSITORY);
+        return session.nodeExists(StoreVisibility.modulesRepositoryPath(siteName));
+    }
+
+    /**
+     * True when {@code path} addresses an artifact of a module of the site's catalogue that the caller
+     * may not see: the module itself is a draft (every path under {@code /<groupPath>/<name>/}, its
+     * {@code maven-metadata.xml} included), or the version directory {@code /<groupPath>/<name>/<version>/}
+     * belongs to a draft version. The catalogue is read in the caller's own session, so a module the caller
+     * cannot read is not listed and its coordinates are served as raw ones, the documented residual.
+     * Candidate modules are found by groupId: every prefix of the path's directories, dots for slashes.
+     */
+    static boolean isDraftArtifact(JCRSessionWrapper session, String siteName, String path) throws RepositoryException {
+        String[] segments = StringUtils.split(path, '/');
+        if (segments.length < 3) {
+            return false;
+        }
+        JCRNodeIteratorWrapper modules = session.getWorkspace().getQueryManager()
+                .createQuery(catalogueQuery(siteName, segments), Query.JCR_SQL2).execute().getNodes();
+        while (modules.hasNext()) {
+            JCRNodeWrapper module = (JCRNodeWrapper) modules.nextNode();
+            String groupId = module.hasProperty("groupId") ? module.getProperty("groupId").getString() : null;
+            String prefix = FileSystem.SEPARATOR + StringUtils.replace(StringUtils.defaultString(groupId), ".", FileSystem.SEPARATOR)
+                    + FileSystem.SEPARATOR + module.getName() + FileSystem.SEPARATOR;
+            if (StringUtils.isNotBlank(groupId) && path.startsWith(prefix) && isHidden(module, path.substring(prefix.length()))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The module is hidden, or the version directory {@code rest} starts with belongs to a hidden version. */
+    private static boolean isHidden(JCRNodeWrapper module, String rest) throws RepositoryException {
+        if (!StoreVisibility.isVisibleToCaller(module)) {
+            return true;
+        }
+        String versionDirectory = StringUtils.substringBefore(rest, FileSystem.SEPARATOR);
+        if (versionDirectory.equals(rest)) {
+            return false; // a file of the module directory (maven-metadata.xml): the module is visible
+        }
+        JCRNodeIteratorWrapper children = module.getNodes();
+        while (children.hasNext()) {
+            JCRNodeWrapper child = (JCRNodeWrapper) children.nextNode();
+            if (child.isNodeType(VERSION_TYPE) && child.hasProperty("versionNumber")
+                    && versionDirectory.equals(child.getProperty("versionNumber").getString())
+                    && !StoreVisibility.isVisibleToCaller(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The modules under the site's repository whose groupId is one of the path's directory prefixes. */
+    private static String catalogueQuery(String siteName, String[] segments) {
+        StringBuilder query = new StringBuilder("SELECT * FROM [").append(MODULE_TYPE)
+                .append("] AS m WHERE ISDESCENDANTNODE(m, '")
+                .append(escape(StoreVisibility.modulesRepositoryPath(siteName))).append("') AND (");
+        StringBuilder groupId = new StringBuilder();
+        // The last segment is a file and the one before it at least the artifactId: never part of the groupId.
+        for (int i = 0; i < segments.length - 2; i++) {
+            if (i > 0) {
+                groupId.append('.');
+                query.append(" OR ");
+            }
+            groupId.append(segments[i]);
+            query.append("m.[groupId] = '").append(escape(groupId.toString())).append('\'');
+        }
+        return query.append(')').toString();
+    }
+
+    private static String escape(String literal) {
+        return StringUtils.replace(literal, "'", "''");
     }
 
     /** Build the upstream Maven coordinates + credentials from the site's OSGi-config settings. */
