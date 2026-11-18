@@ -636,23 +636,24 @@ class SecurityFeedTest {
     }
 
     @Test
-    @DisplayName("JSTORE-SEC-017: each flagged version says who set the flag and when (flaggedBy, flaggedAt)")
-    void flaggedVersionIsAttributed() throws Exception {
+    @DisplayName("JSTORE-SEC-017: the anonymous feed says nothing about who set a flag or when; the stamps stay internal")
+    void flaggedVersionCarriesNoWriter() throws Exception {
         JCRNodeWrapper flagged = version(module("my-module", "org.jahia.community", true), "1.4.2");
         flaggedBy(flagged, "alice");
-        Calendar when = new GregorianCalendar(TimeZone.getTimeZone("Europe/Paris"));
-        when.clear();
-        when.set(2026, Calendar.NOVEMBER, 18, 11, 15, 30);
+        Calendar when = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
         JCRPropertyWrapper date = mock(JCRPropertyWrapper.class);
         when(date.getDate()).thenReturn(when);
         when(flagged.hasProperty("securityFlaggedDate")).thenReturn(true);
         when(flagged.getProperty("securityFlaggedDate")).thenReturn(date);
         queryReturns(flagged);
 
-        JsonNode v = build().get("flaggedVersions").get(0);
+        String feed = new SecurityFeed(jcrTemplate, logger).build(repository);
+        JsonNode v = JSON.readTree(feed).get("flaggedVersions").get(0);
 
-        assertThat(v.get("flaggedBy").asText()).isEqualTo("alice");
-        assertThat(v.get("flaggedAt").asText()).isEqualTo("2026-11-18T10:15:30Z");
+        assertThat(v.get("version").asText()).isEqualTo("1.4.2");
+        assertThat(v.has("flaggedBy")).isFalse();
+        assertThat(v.has("flaggedAt")).isFalse();
+        assertThat(feed).doesNotContain("alice").doesNotContain("securityFlagged");
     }
 
     @Test
@@ -671,16 +672,18 @@ class SecurityFeedTest {
     }
 
     @Test
-    @DisplayName("JSTORE-SEC-017: an attribution without a date is listed without flaggedAt, never with null")
-    void attributionWithoutDate() throws Exception {
-        JCRNodeWrapper flagged = version(module("m", null, true), "2.0.0");
+    @DisplayName("JSTORE-SEC-017: a stamped flag is listed with exactly the schemaVersion 1 fields, nothing more")
+    void stampedFlagHasOnlyContractFields() throws Exception {
+        JCRNodeWrapper flagged = version(module("m", "org.jahia.community", true), "2.0.0");
         flaggedBy(flagged, "alice");
+        stringProperty(flagged, "securitySeverity", "low");
+        stringProperty(flagged, "securityNote", "n");
         queryReturns(flagged);
 
         JsonNode v = build().get("flaggedVersions").get(0);
 
-        assertThat(v.get("flaggedBy").asText()).isEqualTo("alice");
-        assertThat(v.has("flaggedAt")).isFalse();
+        assertThat(v.fieldNames()).toIterable()
+                .containsExactly("groupId", "name", "version", "severity", "references", "note");
     }
 
     // ---------------------------------------------------------------- helpers

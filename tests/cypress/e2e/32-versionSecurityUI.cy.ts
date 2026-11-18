@@ -42,7 +42,7 @@ describe('Version security information (storefront)', () => {
     const asDeveloper = () => cy.apolloClient(devCreds, {log: true, setCurrentApolloClient: false});
 
     type FlaggedVersion = {
-        name: string; version: string; severity?: string; references: string[]; note?: string; flaggedBy?: string; flaggedAt?: string;
+        name: string; version: string; severity?: string; references: string[]; note?: string;
     };
 
     const flaggedVersionsOfModule = () => {
@@ -146,21 +146,23 @@ describe('Version security information (storefront)', () => {
             .and('contain.text', 'Fixes a stored XSS in the settings page');
     });
 
-    it('securityUpdates.json lists the flagged version, attributed to its owner', () => {
-        flaggedVersionsOfModule().then(versions => {
-            expect(versions).to.have.length(1);
-            const {flaggedAt, ...rest} = versions[0];
-            expect(rest).to.deep.equal({
-                groupId: 'org.cypress.secui',
-                name: moduleName,
-                version: '1.0.0',
-                severity: 'high',
-                references: ['CVE-2026-1234'],
-                note: 'Fixes a stored XSS in the settings page',
-                flaggedBy: DEV
-            });
-            expect(flaggedAt, 'flaggedAt').to.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
-        });
+    it('securityUpdates.json lists the flagged version, without its writer; the internal stamp names the owner', () => {
+        // Deep equality: no other field, so nothing about who set the flag (JSTORE-SEC-017).
+        flaggedVersionsOfModule().should('deep.equal', [{
+            groupId: 'org.cypress.secui',
+            name: moduleName,
+            version: '1.0.0',
+            severity: 'high',
+            references: ['CVE-2026-1234'],
+            note: 'Fixes a stored XSS in the settings page'
+        }] as unknown as FlaggedVersion[]);
+
+        cy.login();
+        cy.apollo({
+            query: getNodePropertyInWorkspace,
+            variables: {workspace: 'LIVE', path: versionPath, name: 'securityFlaggedBy'},
+            fetchPolicy: 'no-cache'
+        }).its('data.jcr.nodeByPath.properties.0.value').should('equal', DEV);
     });
 
     it('an anonymous visitor sees the notice but no editor', () => {

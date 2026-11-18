@@ -63,9 +63,8 @@
   and the feed did not say who did it. The module now refuses a change of these properties unless the
   writer holds the `owner` role on the module node (granted to the developer who uploaded the module) or
   `jahiaForgeModerateModule` there (`store-administrator`). Each accepted change records who made it and
-  when (`securityFlaggedBy`, `securityFlaggedDate`, set by the module only), and each entry of
-  `flaggedVersions` gives them as `flaggedBy` and `flaggedAt`. These fields are additive: `schemaVersion`
-  stays 1.
+  when, for audit, in two hidden properties of the version (`securityFlaggedBy`, `securityFlaggedDate`)
+  that only the module sets. The feed does not include them and its format is unchanged.
 
   **Who is impacted:** stores that run a 5.2.0 snapshot. Released versions do not have the security
   flags.
