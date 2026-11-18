@@ -36,10 +36,14 @@ describe('Version security information (storefront)', () => {
         require('graphql-tag/loader!../fixtures/graphql/mutation/setPropertyInWorkspace.graphql');
     const getNodePropertyInWorkspace: DocumentNode =
         require('graphql-tag/loader!../fixtures/graphql/query/getNodePropertyInWorkspace.graphql');
+    const grantNodeRoles: DocumentNode =
+        require('graphql-tag/loader!../fixtures/graphql/mutation/grantNodeRoles.graphql');
 
     const asDeveloper = () => cy.apolloClient(devCreds, {log: true, setCurrentApolloClient: false});
 
-    type FlaggedVersion = {name: string; version: string; severity?: string; references: string[]; note?: string};
+    type FlaggedVersion = {
+        name: string; version: string; severity?: string; references: string[]; note?: string; flaggedBy?: string; flaggedAt?: string;
+    };
 
     const flaggedVersionsOfModule = () => {
         cy.clearCookies();
@@ -100,6 +104,14 @@ describe('Version security information (storefront)', () => {
         [['groupId', 'org.cypress.secui'], ['published', 'true']].forEach(([name, value]) => {
             asDeveloper().apollo({mutation: setPropertyInWorkspace, variables: {workspace: 'LIVE', pathOrId: modulePath, name, value}});
         });
+        // The upload makes its uploader owner of the module (OwnerRoleGrants, in live); a module created through
+        // GraphQL gets no such grant, so it is granted here. Only the module owner (or a store administrator)
+        // may write the security information of its versions (JSTORE-SEC-017).
+        cy.login();
+        cy.apollo({
+            mutation: grantNodeRoles,
+            variables: {workspace: 'LIVE', pathOrId: modulePath, principalType: 'USER', principalName: DEV, roleNames: ['owner']}
+        });
     });
 
     after(() => {
@@ -134,15 +146,21 @@ describe('Version security information (storefront)', () => {
             .and('contain.text', 'Fixes a stored XSS in the settings page');
     });
 
-    it('securityUpdates.json lists the flagged version', () => {
-        flaggedVersionsOfModule().should('deep.equal', [{
-            groupId: 'org.cypress.secui',
-            name: moduleName,
-            version: '1.0.0',
-            severity: 'high',
-            references: ['CVE-2026-1234'],
-            note: 'Fixes a stored XSS in the settings page'
-        }] as unknown as FlaggedVersion[]);
+    it('securityUpdates.json lists the flagged version, attributed to its owner', () => {
+        flaggedVersionsOfModule().then(versions => {
+            expect(versions).to.have.length(1);
+            const {flaggedAt, ...rest} = versions[0];
+            expect(rest).to.deep.equal({
+                groupId: 'org.cypress.secui',
+                name: moduleName,
+                version: '1.0.0',
+                severity: 'high',
+                references: ['CVE-2026-1234'],
+                note: 'Fixes a stored XSS in the settings page',
+                flaggedBy: DEV
+            });
+            expect(flaggedAt, 'flaggedAt').to.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+        });
     });
 
     it('an anonymous visitor sees the notice but no editor', () => {

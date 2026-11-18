@@ -64,9 +64,19 @@ issues. It sits next to `moduleList.json`, which it does not change.
   - Optional: `cvss`, `cves`, `advisoryUrl`, `publishedDate`, `summary`, `introducedIn`.
 - **Flagged versions** (`flaggedVersions`): a module owner can mark a version as containing
   security fixes (`securityFix`, with an optional `securitySeverity`, `securityReferences` and
-  `securityNote`). Published versions of published modules only, as in `moduleList.json`. Any store
-  developer can set these flags, so clients must show them as reported by the module owner, not as
-  Jahia advisories.
+  `securityNote`). Published versions of published modules only, as in `moduleList.json`. Clients must
+  show them as reported by the module owner, not as Jahia advisories.
+  - Only the owner of the module or a store administrator can set, change or remove these properties.
+    The owner is the user who holds the `owner` role on the module node, which the upload grants to the
+    developer who created the module. A developer who only uploaded a version of someone else's module,
+    or who only holds `store-developer`, is refused, although `store-developer` writes everywhere else
+    in the site. A store administrator is a user who has `jahiaForgeModerateModule` on the module (the
+    `store-administrator` role). Jahia publication and imports keep the values they copy.
+  - Each accepted change records who made it and when (`securityFlaggedBy` and `securityFlaggedDate`
+    on the version). Nobody chooses these values: the module sets them to the writer's username and
+    the current time. The feed gives them as `flaggedBy` (a Jahia username) and `flaggedAt` (an
+    ISO-8601 UTC instant). A flagged version without `securityFlaggedBy` is not listed, and the module
+    logs a warning with its path.
 
 ```json
 {"schemaVersion": 1,
@@ -77,12 +87,14 @@ issues. It sits next to `moduleList.json`, which it does not change.
                             "fixedVersions": ["3.10.0", "2.24.0"], "introducedVersion": "2.0.0"},
                            {"component": "jahia-core", "fixedVersions": ["8.2.3.7"]}]}],
  "flaggedVersions": [{"groupId": "org.jahia.community", "name": "my-module", "version": "1.4.2",
-                      "severity": "medium", "references": ["GHSA-..."], "note": "..."}]}
+                      "severity": "medium", "references": ["GHSA-..."], "note": "...",
+                      "flaggedBy": "jdoe", "flaggedAt": "2026-11-18T10:15:30Z"}]}
 ```
 
 `introducedVersion` is present only when the advisory has an `introducedIn` value for that component;
 without it, clients treat every version below a fixed version as affected. The field is optional and
-additive: `schemaVersion` stays 1 and older clients ignore it.
+additive: `schemaVersion` stays 1 and older clients ignore it. `flaggedBy` and `flaggedAt` are additive
+in the same way; `flaggedAt` is absent when the version has no `securityFlaggedDate`.
 
 The view is not cached. When the repository cannot be read, or when a published advisory is not
 valid (for example a malformed `fixedIn` value; an invalid `introducedIn` value is ignored instead, see

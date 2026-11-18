@@ -1,0 +1,11 @@
+# Removes one property of a node in the given workspace. 31-securityUpdatesFeed uses it to check that a store
+# developer cannot unflag another developer's version by deleting its security properties (JSTORE-SEC-017).
+mutation DeletePropertyInWorkspace($workspace: Workspace!, $pathOrId: String!, $name: String!) {
+    jcr(workspace: $workspace) {
+        mutateNode(pathOrId: $pathOrId) {
+            mutateProperty(name: $name) {
+                delete
+            }
+        }
+    }
+}
