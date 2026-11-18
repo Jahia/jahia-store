@@ -34,14 +34,14 @@
     <groupId>org.jahia.community</groupId>
     <artifactId>jahia-store</artifactId>
     <name>Jahia Store</name>
-    <version>5.2.0-SNAPSHOT</version>
+    <version>5.2.0</version>
     <packaging>bundle</packaging>
     <description>This is the custom module (Jahia Store) for running on a Jahia server.</description>
     <scm>
         <connection>scm:git:git@github.com:Jahia/privateappstore.git</connection>
         <url>scm:git:git@github.com:Jahia/privateappstore</url>
         <developerConnection>scm:git:git@github.com:Jahia/privateappstore.git</developerConnection>
-        <tag>HEAD</tag>
+        <tag>5_2_0</tag>
     </scm>
     <properties>
         <jahia-depends>
