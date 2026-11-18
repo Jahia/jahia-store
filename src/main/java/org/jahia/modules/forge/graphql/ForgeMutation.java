@@ -32,7 +32,7 @@ public class ForgeMutation {
 
     @GraphQLField
     @GraphQLName("setRootCategory")
-    @GraphQLDescription("Set the JCR node configured as the site's root category")
+    @GraphQLDescription("Set the site's root category: a category under /sites/systemsite/categories, or that node itself")
     public Boolean setRootCategory(
             @GraphQLName("siteKey") @GraphQLNonNull final String siteKey,
             @GraphQLName("rootCategoryUuid") @GraphQLNonNull final String rootCategoryUuid) {

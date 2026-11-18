@@ -59,7 +59,7 @@
       "heading": "Root category",
       "none": "No root category configured.",
       "uuidField": "Root category UUID",
-      "uuidPlaceholder": "Paste the UUID of a JCR category node"
+      "uuidPlaceholder": "Paste the UUID of a category under /sites/systemsite/categories"
     },
     "list": {
       "heading": "Categories",

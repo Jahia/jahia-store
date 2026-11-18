@@ -7,6 +7,8 @@ import org.jahia.services.content.JCRContentUtils;
 import org.jahia.services.content.JCRNodeWrapper;
 import org.jahia.services.content.JCRSessionFactory;
 import org.jahia.services.content.JCRSessionWrapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.jcr.AccessDeniedException;
 import javax.jcr.ItemNotFoundException;
@@ -22,6 +24,7 @@ import java.util.Locale;
  */
 public final class CategorySettingsMutationExtension {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(CategorySettingsMutationExtension.class);
     private static final String PERMISSION = "siteAdminForgeSettings";
     private static final String JCR_TITLE = "jcr:title";
     private static final String JNT_CATEGORY = "jnt:category";
@@ -39,6 +42,12 @@ public final class CategorySettingsMutationExtension {
             // system session that bypasses ACLs, so an unvalidated UUID could point the site's
             // root at any node in the repository.
             final JCRNodeWrapper category = resolveCategory(session, rootCategoryUuid);
+            // JSTORE-SEC-001: only a category of the shared tree /sites/systemsite/categories may be
+            // a store's root. Another site's subtree is refused, and so is the store's own site.
+            if (!ForgeCategoryScope.isAllowedRoot(category)) {
+                throw new AccessDeniedException("The root category must be under "
+                        + ForgeCategoryScope.CATEGORIES_ROOT_PATH + ": " + rootCategoryUuid);
+            }
             // The root reference now lives in per-site OSGi config (not jmix:forgeSettings),
             // preserving the connection/branding fields written by ForgeSettings.
             final ForgeSettingsService service = ForgeSettingsMutationExtension.service();
@@ -154,13 +163,25 @@ public final class CategorySettingsMutationExtension {
         return node;
     }
 
-    /** Resolve the site's configured root category (UUID stored in per-site OSGi config). */
+    /**
+     * Resolve the site's configured root category (UUID stored in per-site OSGi config). The stored
+     * value is checked again on every use (JSTORE-SEC-001): a root stored before the check existed,
+     * or written to the .cfg file by hand, that is not in /sites/systemsite/categories is refused,
+     * so no write can happen under it.
+     */
     private static JCRNodeWrapper resolveRoot(JCRSessionWrapper session, String siteKey) throws RepositoryException {
         final String rootUuid = ForgeSettingsMutationExtension.service().get(siteKey).getRootCategoryUuid();
         if (StringUtils.isBlank(rootUuid)) {
             throw new RepositoryException("No root category configured for site " + siteKey);
         }
-        return resolveCategory(session, rootUuid);
+        final JCRNodeWrapper root = resolveCategory(session, rootUuid);
+        if (!ForgeCategoryScope.isAllowedRoot(root)) {
+            LOGGER.warn("The root category of site {} is not under {}: refusing category changes. Set the root again.",
+                    siteKey, ForgeCategoryScope.CATEGORIES_ROOT_PATH);
+            throw new AccessDeniedException("The root category of site " + siteKey + " is not under "
+                    + ForgeCategoryScope.CATEGORIES_ROOT_PATH);
+        }
+        return root;
     }
 
     /**

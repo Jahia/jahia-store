@@ -1,5 +1,6 @@
 import {DocumentNode} from 'graphql';
 import {createSite, deleteSite, setNodeProperty, uploadFile} from '@jahia/cypress';
+import {createSharedCategory, deleteSharedCategory} from '../support/sharedCategories';
 
 /**
  * Click the editor's Save and wait for the full-page reload it triggers (the
@@ -71,8 +72,9 @@ describe('Authoring views (JS module)', () => {
 
     // Category-settings fixtures (same OSGi-backed path the admin UI uses), to verify
     // the editor lists the configured categories.
-    const addNode: DocumentNode =
-        require('graphql-tag/loader!../fixtures/graphql/mutation/addNodeForTest.graphql');
+    // Root categories must be in the shared tree /sites/systemsite/categories (JSTORE-SEC-001);
+    // deleteSite does not remove them, so after() deletes them.
+    const sharedRootNames = ['cy-17-cats', 'cy-17-cats2'];
 
     const setRootCategory: DocumentNode =
         require('graphql-tag/loader!../fixtures/graphql/mutation/setRootCategory.graphql');
@@ -156,7 +158,9 @@ describe('Authoring views (JS module)', () => {
     });
 
     after(() => {
+        cy.login();
         deleteSite(siteKey);
+        sharedRootNames.forEach(name => deleteSharedCategory(name));
     });
 
     beforeEach(() => {
@@ -422,11 +426,7 @@ describe('Authoring views (JS module)', () => {
         // Wire a site root category + a child via the OSGi-backed admin path, then
         // confirm the editor surfaces them. Guards the bug where the editor read the
         // stale JCR `rootCategory` property instead of the OSGi forge config.
-        cy.apollo({
-            mutation: addNode,
-            variables: {parentPath: `/sites/${siteKey}`, name: 'cy-cats', primaryNodeType: 'jnt:category'}
-        }).then(result => {
-            const rootUuid = (result.data as {jcr: {addNode: {node: {uuid: string}}}}).jcr.addNode.node.uuid;
+        createSharedCategory(sharedRootNames[0]).then(rootUuid => {
             cy.apollo({mutation: setRootCategory, variables: {siteKey, rootCategoryUuid: rootUuid}});
         });
         cy.apollo({mutation: addForgeCategory, variables: {siteKey, name: 'widgets'}});
@@ -443,11 +443,7 @@ describe('Authoring views (JS module)', () => {
 
     it('category picker works like the tag chips: pick adds a chip, × removes it', () => {
         // Configure two categories so the dropdown still offers one after the first is picked.
-        cy.apollo({
-            mutation: addNode,
-            variables: {parentPath: `/sites/${siteKey}`, name: 'cy-cats2', primaryNodeType: 'jnt:category'}
-        }).then(result => {
-            const rootUuid = (result.data as {jcr: {addNode: {node: {uuid: string}}}}).jcr.addNode.node.uuid;
+        createSharedCategory(sharedRootNames[1]).then(rootUuid => {
             cy.apollo({mutation: setRootCategory, variables: {siteKey, rootCategoryUuid: rootUuid}});
         });
         cy.apollo({mutation: addForgeCategory, variables: {siteKey, name: 'alpha'}});

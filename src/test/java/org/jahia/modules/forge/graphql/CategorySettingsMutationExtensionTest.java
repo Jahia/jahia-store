@@ -98,9 +98,9 @@ class CategorySettingsMutationExtensionTest {
     @Test
     @DisplayName("assertManagedBySite rejects a category outside the site's root-category subtree")
     void assertManagedBySite_foreignCategory_rejected() throws Exception {
-        JCRSessionWrapper session = sessionWithRoot("root-uuid", "/sites/store/categories/root");
+        JCRSessionWrapper session = sessionWithRoot("root-uuid", "/sites/systemsite/categories/store");
         JCRNodeWrapper foreign = mock(JCRNodeWrapper.class);
-        when(foreign.getPath()).thenReturn("/sites/other/categories/root/x");
+        when(foreign.getPath()).thenReturn("/sites/systemsite/categories/other-store/x");
         ForgeSettingsService svc = serviceWithRoot("root-uuid");
 
         try (MockedStatic<BundleUtils> b = org.mockito.Mockito.mockStatic(BundleUtils.class)) {
@@ -118,9 +118,9 @@ class CategorySettingsMutationExtensionTest {
     @Test
     @DisplayName("assertManagedBySite accepts a category inside the site's root-category subtree")
     void assertManagedBySite_ownCategory_accepted() throws Exception {
-        JCRSessionWrapper session = sessionWithRoot("root-uuid", "/sites/store/categories/root");
+        JCRSessionWrapper session = sessionWithRoot("root-uuid", "/sites/systemsite/categories/store");
         JCRNodeWrapper child = mock(JCRNodeWrapper.class);
-        when(child.getPath()).thenReturn("/sites/store/categories/root/child");
+        when(child.getPath()).thenReturn("/sites/systemsite/categories/store/child");
         ForgeSettingsService svc = serviceWithRoot("root-uuid");
 
         try (MockedStatic<BundleUtils> b = org.mockito.Mockito.mockStatic(BundleUtils.class)) {
