@@ -10,6 +10,25 @@
 > each later upgrade of the module: like any module role, `store-administrator` is reset from the
 > module's `roles.xml` when a new version of the module is installed.
 
+### Security
+
+- **JSTORE-SEC-012: the media MIME guard missed files written in live and files nested deep in a
+  module.** The guard removes a script-capable file (SVG, HTML, XML, or bytes that start with markup)
+  stored under a store module or package, so that the file servlet cannot serve it inline. It watched
+  only the edit workspace, but store developers write in live through the store front-end, and it
+  stopped looking for the module after 32 parent nodes, so a file nested deeper was skipped. Such a
+  file stayed in live and ran as script on the store's origin when a visitor opened it. The guard now
+  watches both workspaces and has no depth limit. The upload action also stores a package JAR or a
+  JavaScript module tgz with the content type of its extension (`application/java-archive`,
+  `application/gzip`) instead of the one the browser sent, and refuses a file that does not start with
+  the zip or gzip signature (`forge.uploadJar.error.wrong.format`).
+
+  **Who is impacted:** every installation where store developers can upload.
+
+  **What to do:** nothing for new files. The guard checks a file when it is written, so a file planted
+  before the upgrade stays: look for files under `contents/modules-repository` in live whose
+  `jcr:mimeType` is an SVG, HTML or XML type, or whose content starts with `<`, and delete them.
+
 ### Added
 
 - **Security updates feed.** `/contents/modules-repository.securityUpdates.json` lists the security

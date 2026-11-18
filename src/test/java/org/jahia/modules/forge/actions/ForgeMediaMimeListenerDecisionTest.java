@@ -5,6 +5,8 @@ import org.jahia.services.content.JCRPropertyWrapper;
 import org.jahia.services.content.JCRSessionWrapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import javax.jcr.Binary;
 import java.io.ByteArrayInputStream;
@@ -45,6 +47,14 @@ class ForgeMediaMimeListenerDecisionTest {
         final String path = REPO + "org/m/icon/f/jcr:content";
 
         Fixture(String declaredMime, byte[] data, String parentFolderName) throws Exception {
+            this(declaredMime, data, parentFolderName, 0);
+        }
+
+        /**
+         * @param nestedFolders how many plain folders sit between the file's folder and the forge
+         *                      element (JSTORE-SEC-012: an author can nest folders at will)
+         */
+        Fixture(String declaredMime, byte[] data, String parentFolderName, int nestedFolders) throws Exception {
             JCRNodeWrapper folder = mock(JCRNodeWrapper.class);
             JCRNodeWrapper forgeEl = mock(JCRNodeWrapper.class);
 
@@ -62,7 +72,8 @@ class ForgeMediaMimeListenerDecisionTest {
             when(folder.getName()).thenReturn(parentFolderName);
             when(folder.isNodeType("jmix:forgeElement")).thenReturn(false);
             when(folder.getPath()).thenReturn(REPO + "org/m/icon");
-            when(folder.getParent()).thenReturn(forgeEl);
+            final JCRNodeWrapper folderParent = nestedChain(nestedFolders, forgeEl);
+            when(folder.getParent()).thenReturn(folderParent);
 
             when(forgeEl.isNodeType("jmix:forgeElement")).thenReturn(true);
 
@@ -83,6 +94,19 @@ class ForgeMediaMimeListenerDecisionTest {
             when(dataProp.getBinary()).thenReturn(binary);
             when(resource.getProperty("jcr:data")).thenReturn(dataProp);
         }
+    }
+
+    /** {@code depth} plain folders under the module repository, the deepest one first, above {@code top}. */
+    private static JCRNodeWrapper nestedChain(int depth, JCRNodeWrapper top) throws Exception {
+        JCRNodeWrapper parent = top;
+        for (int i = 0; i < depth; i++) {
+            JCRNodeWrapper nested = mock(JCRNodeWrapper.class);
+            when(nested.isNodeType("jmix:forgeElement")).thenReturn(false);
+            when(nested.getPath()).thenReturn(REPO + "org/m/d" + (depth - i));
+            when(nested.getParent()).thenReturn(parent);
+            parent = nested;
+        }
+        return parent;
     }
 
     private static void validate(Fixture f) throws Exception {
@@ -118,6 +142,38 @@ class ForgeMediaMimeListenerDecisionTest {
         verify(f.resource).setProperty("jcr:mimeType", "image/png");
         verify(f.session).save();
         verify(f.file, never()).remove();
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {31, 32, 40, 200})
+    @DisplayName("JSTORE-SEC-012 S2: a script-capable file nested deep under the forge element is still removed")
+    void ruleA_deeplyNested_removed(int nestedFolders) throws Exception {
+        Fixture f = new Fixture("image/svg+xml", PNG, "evil", nestedFolders);
+        validate(f);
+        verify(f.file, times(1)).remove();
+        verify(f.session).save();
+    }
+
+    @Test
+    @DisplayName("JSTORE-SEC-012 S2: markup bytes under a spoofed raster mime, nested deep, are removed")
+    void ruleA_deeplyNestedMarkupBytes_removed() throws Exception {
+        Fixture f = new Fixture("image/png", "<svg onload=alert(1)>".getBytes(), "evil", 64);
+        validate(f);
+        verify(f.file, times(1)).remove();
+    }
+
+    @Test
+    @DisplayName("a file whose ancestors leave the module repository before a forge element is not touched")
+    void notUnderForgeElement_untouched() throws Exception {
+        Fixture f = new Fixture("image/svg+xml", PNG, "evil", 3);
+        JCRNodeWrapper outside = mock(JCRNodeWrapper.class);
+        when(outside.isNodeType("jmix:forgeElement")).thenReturn(false);
+        when(outside.getPath()).thenReturn("/sites/s/contents");
+        // Re-root the chain: the folder's parent is now a node outside the module repository.
+        when(f.file.getParent().getParent()).thenReturn(outside);
+        validate(f);
+        verify(f.file, never()).remove();
+        verify(f.session, never()).save();
     }
 
     @Test

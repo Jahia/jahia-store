@@ -23,11 +23,11 @@
  */
 package org.jahia.modules.forge.actions;
 
+import org.jahia.api.Constants;
 import org.jahia.services.content.JCRNodeWrapper;
 import org.jahia.services.content.JCRSessionWrapper;
 import org.jahia.services.content.JCRTemplate;
 import org.jahia.services.content.DefaultEventListener;
-import org.osgi.service.component.annotations.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,12 +61,17 @@ import java.io.InputStream;
  *       detected type.</li>
  * </ul>
  *
+ * <p>Media is written in both workspaces: authors edit in the default workspace, and store developers
+ * (who hold {@code jcr:write_live}) write through the storefront's live mutations. Jahia registers a
+ * listener on one workspace only (the default one when none is set), so this class is registered once
+ * per workspace, by {@link ForgeMediaMimeEditListener} and {@link ForgeMediaMimeLiveListener}
+ * (JSTORE-SEC-012).</p>
+ *
  * <p>Follows the module's established {@link DefaultEventListener} pattern (see
- * {@code ForgeSiteDeletionListener}). Being asynchronous it is defense-in-depth, not the sole gate;
- * the storefront also refuses inline rendering of user files and the client keeps its allow-list.</p>
+ * {@code AdvisoriesLockListener}). It is defense-in-depth, not the sole gate: the upload action checks
+ * the artifacts it stores ({@link ArtifactUploadGuard}), and the client keeps its allow-list.</p>
  */
-@Component(service = DefaultEventListener.class, immediate = true)
-public class ForgeMediaMimeListener extends DefaultEventListener {
+public abstract class ForgeMediaMimeListener extends DefaultEventListener {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ForgeMediaMimeListener.class);
     private static final String MODULES_REPOSITORY = "/contents/modules-repository/";
@@ -78,10 +83,13 @@ public class ForgeMediaMimeListener extends DefaultEventListener {
     private static final String JMIX_FORGE_ELEMENT = "jmix:forgeElement";
     private static final String ICON_FOLDER = "icon";
     private static final String SCREENSHOTS_FOLDER = "screenshots";
-    /** Guard against pathological/looping hierarchies while walking up to the forge element. */
-    private static final int MAX_ANCESTOR_WALK = 32;
     /** Both workspaces are checked: media can be authored in EDIT or directly in LIVE. */
-    private static final String[] WORKSPACES = {"default", "live"};
+    private static final String[] WORKSPACES = {Constants.EDIT_WORKSPACE, Constants.LIVE_WORKSPACE};
+
+    /** @param workspace the workspace this listener observes ({@code default} or {@code live}) */
+    protected ForgeMediaMimeListener(String workspace) {
+        setWorkspace(workspace);
+    }
 
     @Override
     public int getEventTypes() {
@@ -206,10 +214,16 @@ public class ForgeMediaMimeListener extends DefaultEventListener {
         }
     }
 
-    /** True when {@code node} has a {@code jmix:forgeElement} ancestor within the module repository. */
+    /**
+     * True when {@code node} has a {@code jmix:forgeElement} ancestor within the module repository.
+     *
+     * <p>The walk has no depth limit: a JCR hierarchy is a tree, and the walk stops at the latest when it
+     * leaves the module repository, so it always ends. A fixed limit let an author nest a file deeper
+     * than the limit and escape the guard (JSTORE-SEC-012).</p>
+     */
     private static boolean isUnderForgeElement(JCRNodeWrapper node) throws RepositoryException {
         JCRNodeWrapper current = node;
-        for (int i = 0; i < MAX_ANCESTOR_WALK && current != null; i++) {
+        while (current != null) {
             if (current.isNodeType(JMIX_FORGE_ELEMENT)) {
                 return true;
             }

@@ -195,6 +195,9 @@ public class CreateEntryFromJar extends Action {
         // The temp upload is always cleaned up here, and any archive parse error maps to a single
         // read-file error - owned by the entry point so neither handler repeats the wrapper.
         try {
+            if (!hasArchiveSignature(uploadedFile, extension)) {
+                return errorResult(session, "forge.uploadJar.error.wrong.format");
+            }
             if (EXTENSION_TGZ.equals(extension)) {
                 return handleTgzUpload(ctx);
             }
@@ -204,6 +207,21 @@ public class CreateEntryFromJar extends Action {
             return errorResult(ctx.session, ERR_UNABLE_READ_FILE);
         } finally {
             ctx.uploadedFile.delete();
+        }
+    }
+
+    /**
+     * Refuses an upload whose bytes do not start with the signature of its archive format, such as a
+     * markup document prepended to a zip, which a lenient archive reader still opens (JSTORE-SEC-012).
+     */
+    private static boolean hasArchiveSignature(DiskFileItem uploadedFile, String extension) throws IOException {
+        try (InputStream in = uploadedFile.getInputStream()) {
+            final boolean valid = ArtifactUploadGuard.hasArchiveSignature(in, extension);
+            if (!valid && logger.isWarnEnabled()) {
+                logger.warn("CreateEntryFromJar: rejected upload '{}': not a {} archive",
+                        ActionSecurityUtils.sanitizeForLog(uploadedFile.getName()), extension);
+            }
+            return valid;
         }
     }
 
@@ -318,7 +336,9 @@ public class CreateEntryFromJar extends Action {
         // session (SEC-366 - the uploader's own role no longer carries live ACL authority).
         ctx.ownerGrants.flush();
         if (!deployJar) {
-            moduleVersion.uploadFile(ctx.uploadedFile.getName(), ctx.uploadedFile.getInputStream(), ctx.uploadedFile.getContentType());
+            // The stored type comes from the trusted extension, never from the request (JSTORE-SEC-012).
+            moduleVersion.uploadFile(ctx.uploadedFile.getName(), ctx.uploadedFile.getInputStream(),
+                    ArtifactUploadGuard.contentType(EXTENSION_TGZ));
             ctx.session.save();
         }
         return buildUploadResult(ctx.request, ctx.renderContext, module, ctx.formParams);
@@ -401,7 +421,8 @@ public class CreateEntryFromJar extends Action {
         JCRNodeWrapper packageVersion = createNode(ctx.request, versionParameters, modulesPackage, JNT_FORGEPACKAGEVERSION, modulesPackage.getName() + "-" + version, false);
         stampUploadDate(packageVersion);
         ctx.ownerGrants.recordOwner(packageVersion);
-        packageVersion.uploadFile(ctx.uploadedFile.getName(), ctx.uploadedFile.getInputStream(), ctx.uploadedFile.getContentType());
+        packageVersion.uploadFile(ctx.uploadedFile.getName(), ctx.uploadedFile.getInputStream(),
+                ArtifactUploadGuard.contentType(EXTENSION_JAR));
 
         logger.info("Package version {} of {} successfully added",
                 ActionSecurityUtils.sanitizeForLog(version), ActionSecurityUtils.sanitizeForLog(title));
