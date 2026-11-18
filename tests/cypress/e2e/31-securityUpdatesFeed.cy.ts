@@ -34,7 +34,12 @@ import {
  *     as fixes[].introducedVersion; a malformed value is refused at write time, and a value the CND cannot
  *     judge (component not in fixedIn) is ignored without taking the feed down;
  *   - owner-flagged versions (securityFix) follow moduleList.json visibility: published modules and
- *     published versions only.
+ *     published versions only;
+ *   - JSTORE-SEC-017: only the owner of a module (the owner role on the module node) or a store administrator
+ *     writes the security information of its versions. A store developer who does not own the module can
+ *     neither flag, change nor unflag them, although the role writes everywhere else in live. Each accepted
+ *     write is stamped on the version (securityFlaggedBy, securityFlaggedDate), which nobody chooses; the
+ *     stamps are kept for audit and the anonymous feed says nothing about the writer.
  *
  * Every refusal is paired with a positive control, so a missing folder or a broken fixture cannot make
  * a refusal test pass for the wrong reason. The view is not cached: each fetch sees the current state.
@@ -63,6 +68,11 @@ describe('Security updates feed (securityUpdates.json)', () => {
 
     const moduleName = 'cy-sec-module';
     const modulePath = `${repositoryPath}/${moduleName}`;
+    // JSTORE-SEC-017: a second module, owned by DEV (the owner grant the upload gives its uploader).
+    const ownedModuleName = 'cy-sec-owned';
+    const ownedModulePath = `${repositoryPath}/${ownedModuleName}`;
+    const ownedVersionPath = `${ownedModulePath}/${ownedModuleName}-2.0.0`;
+    const versionPath = (version: string) => `${modulePath}/${moduleName}-${version}`;
     const advisoryPath = (name: string) => `${advisoriesPath}/${name}`;
 
     const addNodeInWorkspace: DocumentNode =
@@ -71,6 +81,8 @@ describe('Security updates feed (securityUpdates.json)', () => {
         require('graphql-tag/loader!../fixtures/graphql/mutation/setPropertyInWorkspace.graphql');
     const deleteNodeInWorkspace: DocumentNode =
         require('graphql-tag/loader!../fixtures/graphql/mutation/deleteNodeInWorkspace.graphql');
+    const deletePropertyInWorkspace: DocumentNode =
+        require('graphql-tag/loader!../fixtures/graphql/mutation/deletePropertyInWorkspace.graphql');
     const grantNodeRoles: DocumentNode =
         require('graphql-tag/loader!../fixtures/graphql/mutation/grantNodeRoles.graphql');
     const grantSiteRole: DocumentNode =
@@ -81,6 +93,8 @@ describe('Security updates feed (securityUpdates.json)', () => {
         require('graphql-tag/loader!../fixtures/graphql/mutation/createForgeModule.graphql');
     const getNodeByPath: DocumentNode =
         require('graphql-tag/loader!../fixtures/graphql/query/getNodeByPath.graphql');
+    const getNodePropertyInWorkspace: DocumentNode =
+        require('graphql-tag/loader!../fixtures/graphql/query/getNodePropertyInWorkspace.graphql');
 
     type Advisory = {
         id: string; title: string; severity: string; cvss?: number; cves: string[]; url?: string;
@@ -90,7 +104,10 @@ describe('Security updates feed (securityUpdates.json)', () => {
     type Feed = {
         schemaVersion: number;
         advisories: Advisory[];
-        flaggedVersions: Array<{ groupId?: string; name: string; version: string; severity?: string; references: string[]; note?: string }>;
+        flaggedVersions: FlaggedVersion[];
+    };
+    type FlaggedVersion = {
+        groupId?: string; name: string; version: string; severity?: string; references: string[]; note?: string;
     };
     type Creds = { username: string; password: string };
     type Workspace = 'EDIT' | 'LIVE';
@@ -155,11 +172,46 @@ describe('Security updates feed (securityUpdates.json)', () => {
     const severityOf = (id: string) => fetchFeedAnonymously()
         .then(feed => feed.advisories.find(a => a.id === id)?.severity);
 
-    /** The store developer's positive control: a write in live outside the advisories folder is accepted. */
+    /**
+     * The store developer's positive control: a write in live outside the advisories folder is accepted. It
+     * writes the changelog of a version of a module the developer does not own: not a security property,
+     * which only the module owner may write (JSTORE-SEC-017).
+     */
     const writesInLiveElsewhere = (creds: Creds, value: string) =>
         errorsAs(creds, setPropertyInWorkspace, {
-            workspace: 'LIVE', pathOrId: `${modulePath}/${moduleName}-1.4.1`, name: 'securityNote', value
+            workspace: 'LIVE', pathOrId: versionPath('1.4.1'), name: 'changeLog', value
         }).should('have.length', 0);
+
+    /** The flagged versions the feed lists, as an anonymous client sees them. */
+    const flaggedVersions = () => fetchFeedAnonymously().then(feed => feed.flaggedVersions);
+
+    // Null, not undefined, when absent: a .then callback that returns undefined yields its previous subject (the list).
+    const flaggedVersionOf = (name: string, version: string) =>
+        flaggedVersions().then(list => list.find(v => v.name === name && v.version === version) ?? null);
+
+    /** The fields of a flagged version in schemaVersion 1. The writer of a flag is never one of them. */
+    const FLAGGED_VERSION_FIELDS = ['groupId', 'name', 'version', 'severity', 'references', 'note'];
+
+    const expectNoWriterField = (v: object) => {
+        Object.keys(v).forEach(key => expect(FLAGGED_VERSION_FIELDS, `feed field ${key}`).to.include(key));
+        expect(JSON.stringify(v)).to.not.match(/flagged(By|At)|securityFlagged/);
+    };
+
+    /** One property of a node in LIVE, read as root; yields its value or undefined. */
+    const livePropertyAsRoot = (path: string, name: string) => {
+        cy.login();
+        return cy.apollo({query: getNodePropertyInWorkspace, variables: {workspace: 'LIVE', path, name}, fetchPolicy: 'no-cache'})
+            .then(res => (res.data.jcr.nodeByPath.properties as Array<{ value: string }>)[0]?.value);
+    };
+
+    /** The internal audit stamp of a version (who last wrote its security information, and when), read as root. */
+    const storedStamp = (path: string) => livePropertyAsRoot(path, 'securityFlaggedBy')
+        .then(by => livePropertyAsRoot(path, 'securityFlaggedDate').then(date => ({by, date})));
+
+    const expectRecent = (date: string | undefined) => {
+        expect(date, 'securityFlaggedDate').to.be.a('string');
+        expect(Math.abs(Date.now() - Date.parse(date!)), 'securityFlaggedDate is recent').to.be.lessThan(15 * 60 * 1000);
+    };
 
     /** A store developer can neither create, nor modify, nor delete an advisory, in the given workspace. */
     const cannotWriteAdvisories = (creds: Creds, workspace: Workspace, newName: string) => {
@@ -235,6 +287,19 @@ describe('Security updates feed (securityUpdates.json)', () => {
         addVersion('1.4.3', [{name: 'securityFix', value: 'true'}]);
         setNodeProperty(modulePath, 'groupId', 'org.cypress.security', 'en');
         setNodeProperty(modulePath, 'published', 'true', 'en');
+
+        // JSTORE-SEC-017: a published module owned by DEV, with a published, unflagged version.
+        cy.apollo({mutation: createForgeModule, variables: {parentPath: repositoryPath, name: ownedModuleName, title: 'Cypress Owned Module'}});
+        cy.apollo({
+            mutation: addNodeInWorkspace,
+            variables: {
+                workspace: 'EDIT', parentPath: ownedModulePath, name: `${ownedModuleName}-2.0.0`, primaryNodeType: 'jnt:forgeModuleVersion',
+                properties: [{name: 'versionNumber', value: '2.0.0'}, {name: 'published', value: 'true'}]
+            }
+        });
+        setNodeProperty(ownedModulePath, 'groupId', 'org.cypress.security', 'en');
+        setNodeProperty(ownedModulePath, 'published', 'true', 'en');
+        grantRoles(ownedModulePath, ['owner'], DEV, 'USER');
 
         // Publishes the site: the module list, the advisories folder (with its lock) and A and B reach live.
         publishAndWaitJobEnding(sitePath, ['en']);
@@ -490,6 +555,7 @@ describe('Security updates feed (securityUpdates.json)', () => {
         // 1.4.3 is flagged but unpublished, 1.4.1 is published but not flagged.
         fetchFeedAnonymously().then(feed => {
             const mine = feed.flaggedVersions.filter(v => v.name === moduleName);
+            // Deep equality: no other field, so nothing about the writer (JSTORE-SEC-017).
             expect(mine).to.deep.equal([{
                 groupId: 'org.cypress.security',
                 name: moduleName,
@@ -499,6 +565,9 @@ describe('Security updates feed (securityUpdates.json)', () => {
                 note: 'Fixes an XSS in the settings page'
             }]);
         });
+        // JSTORE-SEC-017: root wrote the flag in the setup; the publication kept the internal stamp, without which
+        // the version would not be listed.
+        storedStamp(versionPath('1.4.2')).its('by').should('equal', 'root');
     });
 
     it('leaves moduleList.json unchanged: no security key in the catalogue', () => {
@@ -533,6 +602,79 @@ describe('Security updates feed (securityUpdates.json)', () => {
         ['../../etc@1.0', 'jahia-core@8.2..3', 'jahia-core', 'jahia-core@3a'].forEach((value, i) => {
             errorsAs(null, addNodeInWorkspace, addAdvisoryVars('EDIT', `bad-fixed-in-${i}`, advisoryProps('JSA-2026-9006', 'high', [value], false)))
                 .should('have.length.greaterThan', 0);
+        });
+    });
+
+    describe('JSTORE-SEC-017: only the module owner or a store administrator writes the security flags', () => {
+        /** Sets one property of a version in LIVE (where the storefront writes) as the given account. */
+        const setVersionProperty = (creds: Creds, path: string, name: string, value: string) =>
+            errorsAs(creds, setPropertyInWorkspace, {workspace: 'LIVE', pathOrId: path, name, value});
+
+        it('a store developer who does not own the module can neither flag, change nor unflag its versions', () => {
+            // Positive control: the same developer writes another property of the same versions in live.
+            writesInLiveElsewhere(devCreds, 'changelog written by a developer who does not own the module');
+            errorsAs(devCreds, setPropertyInWorkspace, {
+                workspace: 'LIVE', pathOrId: versionPath('1.4.2'), name: 'changeLog', value: 'still writable'
+            }).should('have.length', 0);
+
+            // Flag a version of someone else's module.
+            setVersionProperty(devCreds, versionPath('1.4.1'), 'securityFix', 'true').should('have.length.greaterThan', 0);
+            setVersionProperty(devCreds, versionPath('1.4.1'), 'securitySeverity', 'critical').should('have.length.greaterThan', 0);
+            // Unflag, change or delete the owner's claim.
+            setVersionProperty(devCreds, versionPath('1.4.2'), 'securityFix', 'false').should('have.length.greaterThan', 0);
+            setVersionProperty(devCreds, versionPath('1.4.2'), 'securityNote', 'Nothing to see here').should('have.length.greaterThan', 0);
+            errorsAs(devCreds, deletePropertyInWorkspace, {workspace: 'LIVE', pathOrId: versionPath('1.4.2'), name: 'securityNote'})
+                .should('have.length.greaterThan', 0);
+            // Rewrite the attribution.
+            setVersionProperty(devCreds, versionPath('1.4.2'), 'securityFlaggedBy', DEV).should('have.length.greaterThan', 0);
+
+            // The feed is untouched: 1.4.2 as root flagged it, 1.4.1 not listed; the stamp still says root.
+            flaggedVersions().then(list => {
+                const mine = list.filter(v => v.name === moduleName);
+                expect(mine.map(v => v.version)).to.deep.equal(['1.4.2']);
+                expect(mine[0].note).to.equal('Fixes an XSS in the settings page');
+                expect(mine[0].severity).to.equal('medium');
+            });
+            storedStamp(versionPath('1.4.2')).its('by').should('equal', 'root');
+        });
+
+        it('the owner of a module flags its version in live; the stamp records who and when, the feed does not', () => {
+            // Negative first: not flagged yet.
+            flaggedVersionOf(ownedModuleName, '2.0.0').should('equal', null);
+
+            setVersionProperty(devCreds, ownedVersionPath, 'securityFix', 'true').should('have.length', 0);
+            setVersionProperty(devCreds, ownedVersionPath, 'securitySeverity', 'high').should('have.length', 0);
+
+            flaggedVersionOf(ownedModuleName, '2.0.0').then(v => {
+                expect(v, 'flagged version of the owned module').to.not.equal(null);
+                expect(v!.severity).to.equal('high');
+                expectNoWriterField(v!);
+            });
+            storedStamp(ownedVersionPath).then(stamp => {
+                expect(stamp.by).to.equal(DEV);
+                expectRecent(stamp.date);
+            });
+        });
+
+        it('the owner cannot choose the attribution: a written securityFlaggedBy becomes the writer\'s own name', () => {
+            setVersionProperty(devCreds, ownedVersionPath, 'securityFlaggedBy', 'root').should('have.length', 0);
+            storedStamp(ownedVersionPath).its('by').should('equal', DEV);
+        });
+
+        it('a store administrator flags a version of a module they do not own; the stamp records them', () => {
+            // Negative first: 1.4.1 is not listed (the developer's attempt above was refused).
+            flaggedVersionOf(moduleName, '1.4.1').should('equal', null);
+
+            setVersionProperty(storeAdminCreds, versionPath('1.4.1'), 'securityFix', 'true').should('have.length', 0);
+
+            flaggedVersionOf(moduleName, '1.4.1').then(v => {
+                expect(v, 'version flagged by the store administrator').to.not.equal(null);
+                expectNoWriterField(v!);
+            });
+            storedStamp(versionPath('1.4.1')).then(stamp => {
+                expect(stamp.by).to.equal(STORE_ADMIN);
+                expectRecent(stamp.date);
+            });
         });
     });
 });

@@ -119,6 +119,8 @@ src/main/java/org/jahia/modules/forge/
   settings/    ForgeSettingsService + ForgeSiteDeletionListener (@Component)
   security/    securityUpdates.json feed (SecurityFeed, LiveChangeDetector) + AdvisoriesLock and its
                per-workspace ACL listeners (@Component): store developers locked out of the advisories folder
+               + SecurityFlagInterceptor (@Component, a JCR property interceptor): only the module owner or a
+               store administrator writes a version's security flags, stamped with who and when (JSTORE-SEC-017)
 src/main/resources/   CND, views, i18n, moduleList rendering
 tests/                Cypress E2E (+ env tooling) — see below
 ```

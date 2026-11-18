@@ -96,6 +96,10 @@
  - beta (long)
  - qualifier (string) multiple
 
+// JSTORE-SEC-017: securityFlaggedBy and securityFlaggedDate say who last wrote the security information
+// (securityFix, securitySeverity, securityReferences, securityNote) and when. Only the module owner or a store
+// administrator writes that information, and SecurityFlagInterceptor sets both stamps: a value anyone else gives
+// is replaced by the writer's own name and the current time. The feed lists a flag only with them.
 [jnt:forgeModuleVersion] > jnt:content, jmix:editorialContent, jmix:forge
  - requiredVersion (weakreference, choicelist[nodes='$currentSite/contents/modules-required-versions//*;jnt:text'])
  - versionNumber (string)
@@ -109,6 +113,8 @@
  - securitySeverity (string, choicelist[resourceBundle]) indexed=no < 'low', 'medium', 'high', 'critical'
  - securityReferences (string) multiple indexed=no < '^(JSA-[0-9]{4}-[0-9]{4}([.][0-9]+)?|CVE-[0-9]{4}-[0-9]{4,}|GHSA(-[23456789cfghjmpqrvwx]{4}){3})$'
  - securityNote (string, textarea) indexed=no
+ - securityFlaggedBy (string) hidden indexed=no
+ - securityFlaggedDate (date) hidden indexed=no
  + * (jnt:file)
 
 [jnt:forgePackageVersion] > jnt:content, jmix:editorialContent, jmix:forge
