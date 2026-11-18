@@ -1,13 +1,15 @@
 import {DocumentNode} from 'graphql';
 import {createSite, deleteSite} from '@jahia/cypress';
+import {createSharedCategory, deleteSharedCategory} from '../support/sharedCategories';
 
 /**
  * Live-UI test for the React categorySettings admin route.
  *
  * Drives the three top-level interactions: wire a root category, add a child,
  * fill in per-language titles. The root category itself is seeded directly via
- * GraphQL (jnt:category under the site root) — that part is infrastructure,
- * not what the admin would do, so it stays outside the UI flow.
+ * GraphQL (a jnt:category under the shared tree /sites/systemsite/categories, the
+ * only place a root is accepted) — that part is infrastructure, not what the
+ * admin would do, so it stays outside the UI flow.
  *
  * The page renders multiple buttons with the label "Save" (root-Save,
  * title-Save). Each click must be scoped to its enclosing section heading
@@ -16,10 +18,7 @@ import {createSite, deleteSite} from '@jahia/cypress';
  */
 describe('Category settings — live UI', () => {
     const siteKey = 'categorySettingsUiSite';
-    const rootCategoryName = 'cy-ui-root-categories';
-
-    const addNode: DocumentNode =
-        require('graphql-tag/loader!../fixtures/graphql/mutation/addNodeForTest.graphql');
+    const rootCategoryName = 'cy-10-ui-root-categories';
 
     const getCategorySettings: DocumentNode =
         require('graphql-tag/loader!../fixtures/graphql/query/getCategorySettings.graphql');
@@ -41,21 +40,15 @@ describe('Category settings — live UI', () => {
             locale: 'en'
         });
 
-        cy.apollo({
-            mutation: addNode,
-            variables: {
-                parentPath: `/sites/${siteKey}`,
-                name: rootCategoryName,
-                primaryNodeType: 'jnt:category'
-            }
-        }).then(result => {
-            rootCategoryUuid = (result.data as { jcr: { addNode: { node: { uuid: string } } } })
-                .jcr.addNode.node.uuid;
+        createSharedCategory(rootCategoryName).then(uuid => {
+            rootCategoryUuid = uuid;
         });
     });
 
     after(() => {
+        cy.login();
         deleteSite(siteKey);
+        deleteSharedCategory(rootCategoryName);
     });
 
     it('configures a root, adds a category, and persists per-language titles', () => {

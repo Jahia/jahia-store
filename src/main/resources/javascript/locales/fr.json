@@ -59,7 +59,7 @@
       "heading": "Catégorie racine",
       "none": "Aucune catégorie racine configurée.",
       "uuidField": "UUID de la catégorie racine",
-      "uuidPlaceholder": "Coller l'UUID d'un nœud JCR de type catégorie"
+      "uuidPlaceholder": "Coller l'UUID d'une catégorie sous /sites/systemsite/categories"
     },
     "list": {
       "heading": "Catégories",

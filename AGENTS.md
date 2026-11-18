@@ -100,6 +100,13 @@ authenticated users are denied (`GqlAccessDeniedException`). This shapes the API
   operations are namespaced under a single `forge` field on the root Query/Mutation
   (`ForgeQueryExtension`/`ForgeMutationExtension` → `ForgeQuery`/`ForgeMutation` containers),
   rather than flat top-level fields.
+- **Categories are not stored per site.** A store's `rootCategoryUuid` must be a `jnt:category` at or
+  below `/sites/systemsite/categories` (JSTORE-SEC-001, `graphql/ForgeCategoryScope`). The category
+  GraphQL runs in a system session, so the rule is enforced in `setRootCategory` AND on every use of
+  the stored value (`resolveRoot`, `assertManagedBySite`, `getForgeCategorySettings`): a stored root
+  outside that tree reads as "no root" with a WARN and every write under it is refused. E2E specs
+  create their roots there with `tests/cypress/support/sharedCategories.ts` and delete them in
+  `after()`, since `deleteSite` does not.
 
 ## Directory map
 
@@ -115,6 +122,8 @@ src/main/java/org/jahia/modules/forge/
   settings/    ForgeSettingsService + ForgeSiteDeletionListener (@Component)
   security/    securityUpdates.json feed (SecurityFeed, LiveChangeDetector) + AdvisoriesLock and its
                per-workspace ACL listeners (@Component): store developers locked out of the advisories folder
+               + SecurityFlagInterceptor (@Component, a JCR property interceptor): only the module owner or a
+               store administrator writes a version's security flags, stamped with who and when (JSTORE-SEC-017)
 src/main/resources/   CND, views, i18n, moduleList rendering
 tests/                Cypress E2E (+ env tooling) — see below
 ```
