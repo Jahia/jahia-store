@@ -185,7 +185,7 @@ describe('Security updates feed (securityUpdates.json)', () => {
     /** The flagged versions the feed lists, as an anonymous client sees them. */
     const flaggedVersions = () => fetchFeedAnonymously().then(feed => feed.flaggedVersions);
 
-    // null, not undefined, when absent: a .then callback that returns undefined yields its previous subject (the list).
+    // Null, not undefined, when absent: a .then callback that returns undefined yields its previous subject (the list).
     const flaggedVersionOf = (name: string, version: string) =>
         flaggedVersions().then(list => list.find(v => v.name === name && v.version === version) ?? null);
 
