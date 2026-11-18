@@ -185,8 +185,9 @@ describe('Security updates feed (securityUpdates.json)', () => {
     /** The flagged versions the feed lists, as an anonymous client sees them. */
     const flaggedVersions = () => fetchFeedAnonymously().then(feed => feed.flaggedVersions);
 
+    // null, not undefined, when absent: a .then callback that returns undefined yields its previous subject (the list).
     const flaggedVersionOf = (name: string, version: string) =>
-        flaggedVersions().then(list => list.find(v => v.name === name && v.version === version));
+        flaggedVersions().then(list => list.find(v => v.name === name && v.version === version) ?? null);
 
     /** The fields of a flagged version in schemaVersion 1. The writer of a flag is never one of them. */
     const FLAGGED_VERSION_FIELDS = ['groupId', 'name', 'version', 'severity', 'references', 'note'];
@@ -639,13 +640,13 @@ describe('Security updates feed (securityUpdates.json)', () => {
 
         it('the owner of a module flags its version in live; the stamp records who and when, the feed does not', () => {
             // Negative first: not flagged yet.
-            flaggedVersionOf(ownedModuleName, '2.0.0').should('equal', undefined);
+            flaggedVersionOf(ownedModuleName, '2.0.0').should('equal', null);
 
             setVersionProperty(devCreds, ownedVersionPath, 'securityFix', 'true').should('have.length', 0);
             setVersionProperty(devCreds, ownedVersionPath, 'securitySeverity', 'high').should('have.length', 0);
 
             flaggedVersionOf(ownedModuleName, '2.0.0').then(v => {
-                expect(v, 'flagged version of the owned module').to.not.equal(undefined);
+                expect(v, 'flagged version of the owned module').to.not.equal(null);
                 expect(v!.severity).to.equal('high');
                 expectNoWriterField(v!);
             });
@@ -662,12 +663,12 @@ describe('Security updates feed (securityUpdates.json)', () => {
 
         it('a store administrator flags a version of a module they do not own; the stamp records them', () => {
             // Negative first: 1.4.1 is not listed (the developer's attempt above was refused).
-            flaggedVersionOf(moduleName, '1.4.1').should('equal', undefined);
+            flaggedVersionOf(moduleName, '1.4.1').should('equal', null);
 
             setVersionProperty(storeAdminCreds, versionPath('1.4.1'), 'securityFix', 'true').should('have.length', 0);
 
             flaggedVersionOf(moduleName, '1.4.1').then(v => {
-                expect(v, 'version flagged by the store administrator').to.not.equal(undefined);
+                expect(v, 'version flagged by the store administrator').to.not.equal(null);
                 expectNoWriterField(v!);
             });
             storedStamp(versionPath('1.4.1')).then(stamp => {
