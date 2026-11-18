@@ -598,6 +598,7 @@ class SecurityFeedTest {
     void flaggedVersionsListed() throws Exception {
         JCRNodeWrapper module = module("my-module", "org.jahia.community", true);
         JCRNodeWrapper flagged = version(module, "1.4.2");
+        flaggedBy(flagged, "alice");
         stringProperty(flagged, "securitySeverity", "medium");
         multiProperty(flagged, "securityReferences", "GHSA-abcd-efgh-ijkl");
         stringProperty(flagged, "securityNote", "Fixes an XSS");
@@ -635,9 +636,11 @@ class SecurityFeedTest {
     @DisplayName("versions of an unpublished module, or of a non-module parent, are never listed")
     void unpublishedOrForeignParentSkipped() throws Exception {
         JCRNodeWrapper hidden = version(module("hidden", "org.jahia.community", false), "2.0.0");
+        flaggedBy(hidden, "alice");
         JCRNodeWrapper packageParent = mock(JCRNodeWrapper.class);
         when(packageParent.isNodeType("jnt:forgeModule")).thenReturn(false);
         JCRNodeWrapper foreign = version(packageParent, "1.0.0");
+        flaggedBy(foreign, "alice");
         queryReturns(hidden, foreign);
 
         assertThat(build().get("flaggedVersions")).isEmpty();
@@ -647,6 +650,7 @@ class SecurityFeedTest {
     @DisplayName("an unknown severity or a missing groupId is omitted, not emitted as null")
     void unknownSeverityAndMissingGroupIdOmitted() throws Exception {
         JCRNodeWrapper flagged = version(module("m", null, true), "2.0.0");
+        flaggedBy(flagged, "alice");
         stringProperty(flagged, "securitySeverity", "urgent");
         queryReturns(flagged);
 
@@ -658,7 +662,63 @@ class SecurityFeedTest {
         assertThat(v.get("references")).isEmpty();
     }
 
+    @Test
+    @DisplayName("JSTORE-SEC-017: the anonymous feed says nothing about who set a flag or when; the stamps stay internal")
+    void flaggedVersionCarriesNoWriter() throws Exception {
+        JCRNodeWrapper flagged = version(module("my-module", "org.jahia.community", true), "1.4.2");
+        flaggedBy(flagged, "alice");
+        Calendar when = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
+        JCRPropertyWrapper date = mock(JCRPropertyWrapper.class);
+        when(date.getDate()).thenReturn(when);
+        when(flagged.hasProperty("securityFlaggedDate")).thenReturn(true);
+        when(flagged.getProperty("securityFlaggedDate")).thenReturn(date);
+        queryReturns(flagged);
+
+        String feed = new SecurityFeed(jcrTemplate, logger).build(repository);
+        JsonNode v = JSON.readTree(feed).get("flaggedVersions").get(0);
+
+        assertThat(v.get("version").asText()).isEqualTo("1.4.2");
+        assertThat(v.has("flaggedBy")).isFalse();
+        assertThat(v.has("flaggedAt")).isFalse();
+        assertThat(feed).doesNotContain("alice").doesNotContain("securityFlagged");
+    }
+
+    @Test
+    @DisplayName("JSTORE-SEC-017: a flag nobody is recorded as setting is not listed, and is logged")
+    void unattributedFlagIsNotListed() throws Exception {
+        JCRNodeWrapper anonymous = version(module("m", "org.jahia.community", true), "3.0.0");
+        when(anonymous.getPath()).thenReturn("/sites/store/contents/modules-repository/m/m-3.0.0");
+        JCRNodeWrapper attributed = version(module("n", "org.jahia.community", true), "1.0.0");
+        flaggedBy(attributed, "alice");
+        queryReturns(anonymous, attributed);
+
+        JsonNode versions = build().get("flaggedVersions");
+
+        assertThat(versions).extracting(v -> v.get("name").asText()).containsExactly("n");
+        verify(logger).warn(anyString(), eq("/sites/store/contents/modules-repository/m/m-3.0.0"));
+    }
+
+    @Test
+    @DisplayName("JSTORE-SEC-017: a stamped flag is listed with exactly the schemaVersion 1 fields, nothing more")
+    void stampedFlagHasOnlyContractFields() throws Exception {
+        JCRNodeWrapper flagged = version(module("m", "org.jahia.community", true), "2.0.0");
+        flaggedBy(flagged, "alice");
+        stringProperty(flagged, "securitySeverity", "low");
+        stringProperty(flagged, "securityNote", "n");
+        queryReturns(flagged);
+
+        JsonNode v = build().get("flaggedVersions").get(0);
+
+        assertThat(v.fieldNames()).toIterable()
+                .containsExactly("groupId", "name", "version", "severity", "references", "note");
+    }
+
     // ---------------------------------------------------------------- helpers
+
+    /** The stamp the SecurityFlagInterceptor writes with an accepted flag. */
+    private static void flaggedBy(JCRNodeWrapper version, String username) throws Exception {
+        stringProperty(version, "securityFlaggedBy", username);
+    }
 
     private JCRNodeWrapper advisory(String name, String id, String severity, String... fixedIn) throws Exception {
         JCRNodeWrapper node = mock(JCRNodeWrapper.class);

@@ -36,10 +36,14 @@ describe('Version security information (storefront)', () => {
         require('graphql-tag/loader!../fixtures/graphql/mutation/setPropertyInWorkspace.graphql');
     const getNodePropertyInWorkspace: DocumentNode =
         require('graphql-tag/loader!../fixtures/graphql/query/getNodePropertyInWorkspace.graphql');
+    const grantNodeRoles: DocumentNode =
+        require('graphql-tag/loader!../fixtures/graphql/mutation/grantNodeRoles.graphql');
 
     const asDeveloper = () => cy.apolloClient(devCreds, {log: true, setCurrentApolloClient: false});
 
-    type FlaggedVersion = {name: string; version: string; severity?: string; references: string[]; note?: string};
+    type FlaggedVersion = {
+        name: string; version: string; severity?: string; references: string[]; note?: string;
+    };
 
     const flaggedVersionsOfModule = () => {
         cy.clearCookies();
@@ -100,6 +104,14 @@ describe('Version security information (storefront)', () => {
         [['groupId', 'org.cypress.secui'], ['published', 'true']].forEach(([name, value]) => {
             asDeveloper().apollo({mutation: setPropertyInWorkspace, variables: {workspace: 'LIVE', pathOrId: modulePath, name, value}});
         });
+        // The upload makes its uploader owner of the module (OwnerRoleGrants, in live); a module created through
+        // GraphQL gets no such grant, so it is granted here. Only the module owner (or a store administrator)
+        // may write the security information of its versions (JSTORE-SEC-017).
+        cy.login();
+        cy.apollo({
+            mutation: grantNodeRoles,
+            variables: {workspace: 'LIVE', pathOrId: modulePath, principalType: 'USER', principalName: DEV, roleNames: ['owner']}
+        });
     });
 
     after(() => {
@@ -134,7 +146,8 @@ describe('Version security information (storefront)', () => {
             .and('contain.text', 'Fixes a stored XSS in the settings page');
     });
 
-    it('securityUpdates.json lists the flagged version', () => {
+    it('securityUpdates.json lists the flagged version, without its writer; the internal stamp names the owner', () => {
+        // Deep equality: no other field, so nothing about who set the flag (JSTORE-SEC-017).
         flaggedVersionsOfModule().should('deep.equal', [{
             groupId: 'org.cypress.secui',
             name: moduleName,
@@ -143,6 +156,13 @@ describe('Version security information (storefront)', () => {
             references: ['CVE-2026-1234'],
             note: 'Fixes a stored XSS in the settings page'
         }] as unknown as FlaggedVersion[]);
+
+        cy.login();
+        cy.apollo({
+            query: getNodePropertyInWorkspace,
+            variables: {workspace: 'LIVE', path: versionPath, name: 'securityFlaggedBy'},
+            fetchPolicy: 'no-cache'
+        }).its('data.jcr.nodeByPath.properties.0.value').should('equal', DEV);
     });
 
     it('an anonymous visitor sees the notice but no editor', () => {

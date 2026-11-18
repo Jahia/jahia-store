@@ -50,8 +50,11 @@ import java.util.TimeZone;
  *       ({@link LiveChangeDetector}).</li>
  *   <li>{@code flaggedVersions}: module versions whose owner set {@code securityFix}, read from the LIVE
  *       workspace in the caller's own session, with the visibility rules of {@code moduleList.json}
- *       (published modules, published versions). Any store developer can set these flags, so clients must
- *       present them as reported by the module owner, not as Jahia advisories.</li>
+ *       (published modules, published versions). Only the owner of the module or a store administrator can
+ *       write these flags ({@link SecurityFlagInterceptor}, JSTORE-SEC-017), which stamps each accepted write
+ *       with who made it and when. The stamps are kept for audit and never emitted: the anonymous feed says
+ *       nothing about the writer. A flag without a stamp is not listed. Clients must present the flags as
+ *       reported by the module owner, not as Jahia advisories.</li>
  * </ul>
  *
  * <p>Errors fail loud. A repository error, or a published advisory that is not valid, raises an exception
@@ -297,7 +300,7 @@ public final class SecurityFeed {
 
     // ------------------------------------------------------------------------------ flagged versions
 
-    private static List<Map<String, Object>> readFlaggedVersions(JCRNodeWrapper repositoryNode)
+    private List<Map<String, Object>> readFlaggedVersions(JCRNodeWrapper repositoryNode)
             throws RepositoryException {
         String statement = "SELECT * FROM [jnt:forgeModuleVersion] AS v WHERE ISDESCENDANTNODE(v, '"
                 + repositoryNode.getPath().replace("'", "''")
@@ -308,9 +311,17 @@ public final class SecurityFeed {
         while (versions.hasNext()) {
             JCRNodeWrapper version = (JCRNodeWrapper) versions.nextNode();
             JCRNodeWrapper module = version.getParent();
-            if (module.isNodeType(MODULE_TYPE) && bool(module, PUBLISHED)) {
-                flagged.add(toFlaggedVersion(module, version));
+            if (!module.isNodeType(MODULE_TYPE) || !bool(module, PUBLISHED)) {
+                continue;
             }
+            if (string(version, SecurityFlagInterceptor.FLAGGED_BY) == null) {
+                // JSTORE-SEC-017: a flag the store did not record anyone setting (written before the check
+                // existed, or by a path that bypasses Jahia's content API) is a claim of unknown origin.
+                logger.warn("Flagged version {} records nobody setting its security flag: not listed in the security feed",
+                        version.getPath());
+                continue;
+            }
+            flagged.add(toFlaggedVersion(module, version));
         }
         return flagged;
     }

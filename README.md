@@ -83,9 +83,19 @@ issues. It sits next to `moduleList.json`, which it does not change.
   - Optional: `cvss`, `cves`, `advisoryUrl`, `publishedDate`, `summary`, `introducedIn`.
 - **Flagged versions** (`flaggedVersions`): a module owner can mark a version as containing
   security fixes (`securityFix`, with an optional `securitySeverity`, `securityReferences` and
-  `securityNote`). Published versions of published modules only, as in `moduleList.json`. Any store
-  developer can set these flags, so clients must show them as reported by the module owner, not as
-  Jahia advisories.
+  `securityNote`). Published versions of published modules only, as in `moduleList.json`. Clients must
+  show them as reported by the module owner, not as Jahia advisories.
+  - Only the owner of the module or a store administrator can set, change or remove these properties.
+    The owner is the user who holds the `owner` role on the module node, which the upload grants to the
+    developer who created the module. A developer who only uploaded a version of someone else's module,
+    or who only holds `store-developer`, is refused, although `store-developer` writes everywhere else
+    in the site. A store administrator is a user who has `jahiaForgeModerateModule` on the module (the
+    `store-administrator` role). Jahia publication and imports keep the values they copy.
+  - Each accepted change records who made it and when, for audit, in two hidden properties of the
+    version: `securityFlaggedBy` (the writer's username) and `securityFlaggedDate`. Nobody chooses these
+    values: the module sets them to the writer's username and the current time. The feed does not
+    include them: it says nothing about who set a flag. A flagged version without `securityFlaggedBy` is
+    not listed, and the module logs a warning with its path.
 
 ```json
 {"schemaVersion": 1,
