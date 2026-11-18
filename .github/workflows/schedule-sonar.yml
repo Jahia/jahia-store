@@ -24,16 +24,16 @@ jobs:
         username: ${{ secrets.GH_PACKAGES_USERNAME }}
         password: ${{ secrets.GH_PACKAGES_TOKEN }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ matrix.supported_branches }}
-      - uses: jahia/jahia-modules-action/build@v2
+      - uses: jahia/jahia-modules-action/build@0c44b0495f0d9991686e9c8340614da1c6618099 # v2
         with:
           nexus_username: ${{ secrets.NEXUS_USERNAME }}
           nexus_password: ${{ secrets.NEXUS_PASSWORD }}
           module_id: ${{ env.MODULE_ID }}
           mvn_settings_filepath: '.github/maven.settings.xml'
-      - uses: jahia/jahia-modules-action/sonar-analysis@v2
+      - uses: jahia/jahia-modules-action/sonar-analysis@0c44b0495f0d9991686e9c8340614da1c6618099 # v2
         with:
           primary_release_branch: ${{ matrix.supported_branches }}
           build_artifacts: ''
