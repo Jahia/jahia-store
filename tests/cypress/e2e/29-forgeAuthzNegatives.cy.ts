@@ -1,5 +1,6 @@
 import {DocumentNode} from 'graphql';
 import {createSite, deleteSite, createUser, deleteUser} from '@jahia/cypress';
+import {createSharedCategory, deleteSharedCategory} from '../support/sharedCategories';
 
 /**
  * Negative authorization coverage for the {@code forge} GraphQL namespace — the NEW halves of the
@@ -13,6 +14,12 @@ import {createSite, deleteSite, createUser, deleteUser} from '@jahia/cypress';
  *         cannot be granted through {@code forge.grantRole}.
  *   S36 / S25 — a category UUID OUTSIDE the site's root-category subtree is refused by a category
  *         mutation (the system session bypasses ACLs, so the UUID is re-validated).
+ *   JSTORE-SEC-001 — the root category must be a category of the shared tree
+ *         {@code /sites/systemsite/categories}: {@code forge.setRootCategory} refuses a category of
+ *         another site and one of the store's own site, and keeps the root it had.
+ *   JSTORE-SEC-001 S4 — {@code forge.addCategory} refuses a name that is not one JCR name segment
+ *         ({@code ..}, {@code ../x}, {@code a/b}, {@code a[1]}), which would otherwise create the
+ *         node outside the root category in a system session.
  *
  * Identity note (as in 21-permissions): GraphQL identity is the apollo client's Basic-auth header,
  * so an ordinary-user run uses a client built with that user's credentials.
@@ -22,6 +29,11 @@ import {createSite, deleteSite, createUser, deleteUser} from '@jahia/cypress';
  */
 describe('forge GraphQL — authorization negatives', () => {
     const siteKey = 'forgeAuthzNeg';
+    // A second site whose category the store must not be able to take as its root (JSTORE-SEC-001).
+    const otherSiteKey = 'forgeAuthzNegOther';
+    // Created in the shared tree, which deleteSite does not clean: after() deletes them.
+    const rootCategoryName = 'cy-29-root';
+    const siblingCategoryName = 'cy-29-sibling';
     const ORDINARY = 'ordinary';
     const ORDINARY_PWD = 'Ordinary#1234';
 
@@ -31,6 +43,8 @@ describe('forge GraphQL — authorization negatives', () => {
     const setRootCategory: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/setRootCategory.graphql');
     const updateForgeCategoryTitles: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/updateForgeCategoryTitles.graphql');
     const addNodeWithProperties: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/addNodeWithProperties.graphql');
+    const getCategorySettings: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/query/getCategorySettings.graphql');
+    const addForgeCategory: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/addForgeCategory.graphql');
 
     // Assert a GraphQL op was denied: with errorPolicy 'all' the guard surfaces as a GraphQL error
     // (GqlAccessDeniedException / ForgeSettingsException) rather than data.
@@ -54,13 +68,28 @@ describe('forge GraphQL — authorization negatives', () => {
             serverName: 'forgeauthzneg.local',
             locale: 'en'
         });
+        try {
+            deleteSite(otherSiteKey);
+        } catch {
+            // First run
+        }
+
+        createSite(otherSiteKey, {
+            languages: 'en',
+            templateSet: 'jahia-store-template',
+            serverName: 'forgeauthznegother.local',
+            locale: 'en'
+        });
         createUser(ORDINARY, ORDINARY_PWD); // global user, no site roles -> no siteAdminForgeSettings
     });
 
     after(() => {
         cy.login();
         deleteSite(siteKey);
+        deleteSite(otherSiteKey);
         deleteUser(ORDINARY);
+        deleteSharedCategory(rootCategoryName);
+        deleteSharedCategory(siblingCategoryName);
     });
 
     it('S33: an ordinary user is DENIED reading forge.settings', () => {
@@ -125,43 +154,73 @@ describe('forge GraphQL — authorization negatives', () => {
 
     it('S36/S25: a category outside the site root-category subtree is refused', () => {
         cy.login();
-        // Root category + a sibling ("foreign") category that is NOT under the root subtree.
-        cy.apollo({
-            mutation: addNodeWithProperties,
-            variables: {
-                parentPath: `/sites/${siteKey}`,
-                name: 'rootCat',
-                primaryNodeType: 'jnt:category',
-                properties: [],
-                mixins: []
-            }
-        })
-            .its('data.jcr.addNode.node.uuid')
-            .then((rootUuid: string) => {
-                cy.apollo({mutation: setRootCategory, variables: {siteKey, rootCategoryUuid: rootUuid}})
-                    .its('data.forge.setRootCategory')
-                    .should('equal', true);
-            });
-        cy.apollo({
-            mutation: addNodeWithProperties,
-            variables: {
-                parentPath: `/sites/${siteKey}`,
-                name: 'foreignCat',
-                primaryNodeType: 'jnt:category',
-                properties: [],
-                mixins: []
-            }
-        })
-            .its('data.jcr.addNode.node.uuid')
-            .then((foreignUuid: string) => {
-                // ForeignCat is a real jnt:category but lives OUTSIDE rootCat's subtree -> must be refused.
-                expectDenied(
-                    cy.apollo({
-                        mutation: updateForgeCategoryTitles,
-                        variables: {siteKey, uuid: foreignUuid, titles: [{language: 'en', title: 'Hijacked'}]},
-                        errorPolicy: 'all'
-                    })
-                );
-            });
+        // Root category + a sibling category of the shared tree that is NOT under the root subtree.
+        createSharedCategory(rootCategoryName).then(rootUuid => {
+            cy.apollo({mutation: setRootCategory, variables: {siteKey, rootCategoryUuid: rootUuid}})
+                .its('data.forge.setRootCategory')
+                .should('equal', true);
+        });
+        createSharedCategory(siblingCategoryName).then(siblingUuid => {
+            // The sibling is a real jnt:category but lives OUTSIDE the root's subtree -> must be refused.
+            expectDenied(
+                cy.apollo({
+                    mutation: updateForgeCategoryTitles,
+                    variables: {siteKey, uuid: siblingUuid, titles: [{language: 'en', title: 'Hijacked'}]},
+                    errorPolicy: 'all'
+                })
+            );
+        });
+    });
+
+    it('JSTORE-SEC-001: setRootCategory refuses a category of another site and of the store site', () => {
+        cy.login();
+        let sharedRootUuid: string;
+        createSharedCategory(rootCategoryName).then(uuid => {
+            sharedRootUuid = uuid;
+            cy.apollo({mutation: setRootCategory, variables: {siteKey, rootCategoryUuid: uuid}})
+                .its('data.forge.setRootCategory')
+                .should('equal', true);
+        });
+
+        // A category of ANOTHER site, then one of the store's OWN site: neither is in the shared
+        // tree /sites/systemsite/categories, so both are refused.
+        [otherSiteKey, siteKey].forEach(parentSite => {
+            cy.apollo({
+                mutation: addNodeWithProperties,
+                variables: {
+                    parentPath: `/sites/${parentSite}`,
+                    name: 'siteLocalCat',
+                    primaryNodeType: 'jnt:category',
+                    properties: [],
+                    mixins: []
+                }
+            })
+                .its('data.jcr.addNode.node.uuid')
+                .then((siteLocalUuid: string) => {
+                    expectDenied(
+                        cy.apollo({
+                            mutation: setRootCategory,
+                            variables: {siteKey, rootCategoryUuid: siteLocalUuid},
+                            errorPolicy: 'all'
+                        })
+                    );
+                });
+        });
+
+        // The refused calls stored nothing: the store keeps its shared-tree root.
+        cy.then(() => {
+            cy.apollo({query: getCategorySettings, variables: {siteKey}, fetchPolicy: 'no-cache'})
+                .its('data.forge.categorySettings.rootCategoryUuid')
+                .should('equal', sharedRootUuid);
+        });
+    });
+
+    it('JSTORE-SEC-001: addCategory refuses a name that is not a single JCR name segment', () => {
+        cy.login();
+        ['..', '../escaped', 'a/b', 'a[1]'].forEach(name => {
+            expectDenied(
+                cy.apollo({mutation: addForgeCategory, variables: {siteKey, name}, errorPolicy: 'all'})
+            );
+        });
     });
 });

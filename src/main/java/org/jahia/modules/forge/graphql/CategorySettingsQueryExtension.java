@@ -83,6 +83,16 @@ public final class CategorySettingsQueryExtension {
                                 siteLanguages, Collections.emptyList());
                     }
 
+                    // JSTORE-SEC-001: this session bypasses ACLs, so re-check the stored value on
+                    // every read. A root that is not a category of /sites/systemsite/categories reads
+                    // as no root: nothing of it (path, name, children) is returned.
+                    if (!ForgeCategoryScope.isAllowedRoot(root)) {
+                        LOGGER.warn("The root category of site {} is not a category under {}: ignoring it. Set the root again.",
+                                siteKey, ForgeCategoryScope.CATEGORIES_ROOT_PATH);
+                        return new GqlForgeCategorySettings(siteKey, null, null, null,
+                                siteLanguages, Collections.emptyList());
+                    }
+
                     return new GqlForgeCategorySettings(
                             siteKey,
                             root.getIdentifier(),

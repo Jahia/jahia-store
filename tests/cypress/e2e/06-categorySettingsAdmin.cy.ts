@@ -1,10 +1,11 @@
 import {DocumentNode} from 'graphql';
 import {createSite, deleteSite} from '@jahia/cypress';
+import {SHARED_CATEGORIES_PATH, createSharedCategory, deleteSharedCategory} from '../support/sharedCategories';
 
 /**
  * Verifies the React + GraphQL replacement for categorySettings.flow:
  *   - read returns rootCategoryUuid=null + empty categories on fresh site
- *   - setRootCategory wires up a root jnt:category
+ *   - setRootCategory wires up a root jnt:category of the shared tree /sites/systemsite/categories
  *   - addForgeCategory creates a child jnt:category and returns its UUID
  *   - updateForgeCategoryTitles writes per-language titles which the query reflects
  *   - deleteForgeCategory removes the node
@@ -12,7 +13,8 @@ import {createSite, deleteSite} from '@jahia/cypress';
  */
 describe('Category settings admin (React + GraphQL)', () => {
     const siteKey = 'categorySettingsSite';
-    const rootCategoryName = 'cy-root-categories';
+    const rootCategoryName = 'cy-06-root-categories';
+    const outsiderCategoryName = 'cy-06-outsider-category';
 
     const getCategorySettings: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/query/getCategorySettings.graphql');
 
@@ -24,13 +26,7 @@ describe('Category settings admin (React + GraphQL)', () => {
 
     const deleteForgeCategory: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/deleteForgeCategory.graphql');
 
-    const addNode: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/addNodeForTest.graphql');
-
     const getNodeProperty: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/query/getNodeProperties.graphql');
-
-    // Used by the helper that creates a root category node we can use as the
-    // site's rootCategory. Kept separate from the production GraphQL fixtures.
-    // We inline the mutation here so test 06 stays self-contained.
 
     let rootCategoryUuid: string;
 
@@ -49,24 +45,18 @@ describe('Category settings admin (React + GraphQL)', () => {
             locale: 'en'
         });
 
-        // Create a jnt:category node we can wire as rootCategory. Jahia's
-        // jnt:virtualsite accepts child content nodes, so dropping the category
-        // directly under the site root is the simplest isolated fixture.
-        cy.apollo({
-            mutation: addNode,
-            variables: {
-                parentPath: `/sites/${siteKey}`,
-                name: rootCategoryName,
-                primaryNodeType: 'jnt:category'
-            }
-        }).then(result => {
-            rootCategoryUuid = (result.data as { jcr: { addNode: { node: { uuid: string } } } })
-                .jcr.addNode.node.uuid;
+        // Create a jnt:category we can wire as rootCategory. Categories are not stored per site:
+        // the root must be in the shared tree /sites/systemsite/categories (JSTORE-SEC-001).
+        createSharedCategory(rootCategoryName).then(uuid => {
+            rootCategoryUuid = uuid;
         });
     });
 
     after(() => {
+        cy.login();
         deleteSite(siteKey);
+        deleteSharedCategory(rootCategoryName);
+        deleteSharedCategory(outsiderCategoryName);
     });
 
     it('returns empty settings before any root is configured', () => {
@@ -89,7 +79,7 @@ describe('Category settings admin (React + GraphQL)', () => {
             .its('data.forge.categorySettings')
             .should((s: { rootCategoryUuid: string; rootCategoryPath: string }) => {
                 expect(s.rootCategoryUuid).to.equal(rootCategoryUuid);
-                expect(s.rootCategoryPath).to.equal(`/sites/${siteKey}/${rootCategoryName}`);
+                expect(s.rootCategoryPath).to.equal(`${SHARED_CATEGORIES_PATH}/${rootCategoryName}`);
             });
     });
 
@@ -141,17 +131,14 @@ describe('Category settings admin (React + GraphQL)', () => {
     });
 
     it('refuses to delete a category outside the site root category (scope guard, SECURITY-571)', () => {
-        // A real jnt:category, but a SIBLING of the configured root category — i.e.
-        // outside the subtree this site administrator manages. The site-scoped
-        // permission gate must NOT let it be deleted by UUID (the work runs in a
-        // system session that bypasses ACLs).
-        const outsiderPath = `/sites/${siteKey}/cy-outsider-category`;
+        // A real jnt:category of the shared tree, but a SIBLING of the configured root
+        // category — i.e. outside the subtree this site administrator manages. The
+        // site-scoped permission gate must NOT let it be deleted by UUID (the work runs
+        // in a system session that bypasses ACLs).
+        const outsiderPath = `${SHARED_CATEGORIES_PATH}/${outsiderCategoryName}`;
         let outsiderUuid: string;
-        cy.apollo({
-            mutation: addNode,
-            variables: {parentPath: `/sites/${siteKey}`, name: 'cy-outsider-category', primaryNodeType: 'jnt:category'}
-        }).then(result => {
-            outsiderUuid = (result.data as {jcr: {addNode: {node: {uuid: string}}}}).jcr.addNode.node.uuid;
+        createSharedCategory(outsiderCategoryName).then(uuid => {
+            outsiderUuid = uuid;
         });
 
         cy.then(() => {

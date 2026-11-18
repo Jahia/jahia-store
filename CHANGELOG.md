@@ -10,6 +10,35 @@
 > each later upgrade of the module: like any module role, `store-administrator` is reset from the
 > module's `roles.xml` when a new version of the module is installed.
 
+### Security
+
+- **JSTORE-SEC-001: a store's root category could point at another site's categories.**
+  The category operations of the store administration run in a system session, which ignores
+  permissions. `forge.setRootCategory` accepted any category, so a user with the store settings
+  permission (`siteAdminForgeSettings`) on one site could set as root a category of another site,
+  then read, add, rename and delete categories there. `forge.addCategory` also accepted a name such
+  as `../x`, which created the node above the root category.
+  - The root category must now be a category under `/sites/systemsite/categories`, the tree where
+    Jahia keeps categories, or that node itself. `forge.setRootCategory` refuses any other category
+    with an error and keeps the current root: a category of another site, one of the store's own
+    site, or any node outside that tree.
+  - The rule is checked again each time the stored root is used, because the settings file can hold
+    a root set before this version. If the root is outside that tree, the *Categories* page shows no
+    root and no category, `forge.addCategory`, `forge.updateCategoryTitles` and
+    `forge.deleteCategory` are refused, and the module logs a warning that names the site.
+  - A category name must be a single name: `.`, `..`, the characters `/ \ : [ ] | *` and control
+    characters are refused with an error, and nothing is created.
+
+  **Who is impacted:** installations where a user holds the store settings permission on a site but
+  must not change the categories of other sites.
+
+  **What to do:** if a store's root category is not under `/sites/systemsite/categories`, the module
+  logs `The root category of site <siteKey> is not under /sites/systemsite/categories` or
+  `The root category of site <siteKey> is not a category under /sites/systemsite/categories`. Create
+  the store's categories under `/sites/systemsite/categories` and set the new root in
+  *Store administration > Categories*. Modules keep the categories already assigned to them, but
+  the store only offers the children of the new root.
+
 ### Added
 
 - **Security updates feed.** `/contents/modules-repository.securityUpdates.json` lists the security
