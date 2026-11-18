@@ -102,6 +102,11 @@ added here.
 
 ### Security
 
+- **The release workflow no longer opens a remote debugging session.** On a failed step,
+  `on-release.yml` started a tmate session with no access limit, while the CI account's SSH key was loaded
+  in the agent: anyone who read the public job log could connect. The step is removed. Every action of the
+  workflows is now pinned to a commit SHA (Dependabot keeps the pins current). Pre-release audit finding
+  JSTORE-SEC-019.
 - **SEC-366 / GHSA-f882-3xwv-3439: the `store-developer` role could rewrite the site's live ACL.**
   The role carried `jcr:modifyAccessControl_live` at site scope, so a store developer could grant
   themselves `store-administrator` or remove the site administrators, in live, without going
