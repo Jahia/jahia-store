@@ -10,6 +10,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import javax.jcr.Binary;
 import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.lang.reflect.Method;
 
 import static org.mockito.ArgumentMatchers.eq;
@@ -67,6 +68,7 @@ class ForgeMediaMimeListenerDecisionTest {
             when(file.isNodeType("jnt:file")).thenReturn(true);
             when(file.isNodeType("jmix:forgeElement")).thenReturn(false);
             when(file.getPath()).thenReturn(REPO + "org/m/icon/f");
+            when(file.getName()).thenReturn("f");
             when(file.getParent()).thenReturn(folder);
 
             when(folder.getName()).thenReturn(parentFolderName);
@@ -162,18 +164,114 @@ class ForgeMediaMimeListenerDecisionTest {
         verify(f.file, times(1)).remove();
     }
 
-    @Test
-    @DisplayName("a file whose ancestors leave the module repository before a forge element is not touched")
-    void notUnderForgeElement_untouched() throws Exception {
-        Fixture f = new Fixture("image/svg+xml", PNG, "evil", 3);
+    /** Re-roots the fixture so that no forge element sits between the file and the module repository root. */
+    private static void outsideForgeElement(Fixture f) throws Exception {
         JCRNodeWrapper outside = mock(JCRNodeWrapper.class);
         when(outside.isNodeType("jmix:forgeElement")).thenReturn(false);
         when(outside.getPath()).thenReturn("/sites/s/contents");
-        // Re-root the chain: the folder's parent is now a node outside the module repository.
-        when(f.file.getParent().getParent()).thenReturn(outside);
+        JCRNodeWrapper folder = f.file.getParent();
+        when(folder.getParent()).thenReturn(outside);
+    }
+
+    @Test
+    @DisplayName("outside a forge element, the raster rule does not apply: a mismatched mime is not pinned")
+    void notUnderForgeElement_noRasterRule() throws Exception {
+        Fixture f = new Fixture("image/gif", PNG, "icon", 3);
+        outsideForgeElement(f);
+        validate(f);
+        verify(f.file, never()).remove();
+        verify(f.resource, never()).setProperty(eq("jcr:mimeType"), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    // ---- JSTORE-SEC-012 product rule: SVG and HTML are never accepted as module media -------------
+
+    @Test
+    @DisplayName("SVG/HTML rule: an honestly declared SVG in the module repository is removed, even outside a forge element")
+    void svgHonestlyDeclared_outsideForgeElement_removed() throws Exception {
+        Fixture f = new Fixture("image/svg+xml", "<svg xmlns=\"http://www.w3.org/2000/svg\"/>".getBytes(), "evil", 3);
+        outsideForgeElement(f);
+        validate(f);
+        verify(f.file, times(1)).remove();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"logo.svg", "LOGO.SVG", "x.svgz", "page.html", "page.HTM", "page.xhtml", "page.xht", "page.shtml"})
+    @DisplayName("SVG/HTML rule: a file named as SVG or HTML is removed, whatever its mime and bytes")
+    void svgOrHtmlName_removed(String name) throws Exception {
+        Fixture f = new Fixture("image/png", PNG, "icon");
+        when(f.file.getName()).thenReturn(name);
+        validate(f);
+        verify(f.file, times(1)).remove();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "hello <svg onload=alert(1)>",
+            "text first, then <!DOCTYPE html><p>",
+            "abc <HTML><body>",
+            "x<script>alert(1)</script>"
+    })
+    @DisplayName("SVG/HTML rule: SVG or HTML markup anywhere in the sniffed bytes is removed, not only at the start")
+    void markupTokenInContent_removed(String content) throws Exception {
+        Fixture f = new Fixture("text/plain", content.getBytes(StandardCharsets.UTF_8), "docs");
+        validate(f);
+        verify(f.file, times(1)).remove();
+    }
+
+    @Test
+    @DisplayName("SVG/HTML rule: a raster/markup polyglot (GIF header, then <html>) is removed")
+    void rasterMarkupPolyglot_removed() throws Exception {
+        Fixture f = new Fixture("image/gif", "GIF89a\u0001\u0000\u0001\u0000<html><script>alert(1)</script>"
+                .getBytes(StandardCharsets.ISO_8859_1), "icon");
+        validate(f);
+        verify(f.file, times(1)).remove();
+    }
+
+    @Test
+    @DisplayName("SVG/HTML rule: a module artifact (zip) whose stored entry holds HTML is kept")
+    void zipArtifactWithHtmlEntry_kept() throws Exception {
+        byte[] zip = concat(new byte[]{0x50, 0x4B, 0x03, 0x04, 0x0A, 0x00},
+                "index.html<html><body>docs</body></html>".getBytes(StandardCharsets.UTF_8));
+        Fixture f = new Fixture("application/java-archive", zip, "pkg-1.0");
+        when(f.file.getName()).thenReturn("pkg-1.0.jar");
+        validate(f);
+        verify(f.file, never()).remove();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"logo.png", "photo.jpg", "anim.gif", "shot.webp"})
+    @DisplayName("SVG/HTML rule: allowed rasters (PNG, JPEG, GIF, WebP) are kept")
+    void allowedRasters_kept(String name) throws Exception {
+        byte[] bytes;
+        String mime;
+        switch (name.substring(name.lastIndexOf('.') + 1)) {
+            case "jpg":
+                bytes = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0, 0x10, 'J', 'F', 'I', 'F'};
+                mime = "image/jpeg";
+                break;
+            case "gif":
+                bytes = "GIF89a\u0001\u0000\u0001\u0000".getBytes(StandardCharsets.ISO_8859_1);
+                mime = "image/gif";
+                break;
+            case "webp":
+                bytes = "RIFF\u0000\u0000\u0000\u0000WEBPVP8 ".getBytes(StandardCharsets.ISO_8859_1);
+                mime = "image/webp";
+                break;
+            default:
+                bytes = PNG;
+                mime = "image/png";
+        }
+        Fixture f = new Fixture(mime, bytes, "screenshots");
+        when(f.file.getName()).thenReturn(name);
         validate(f);
         verify(f.file, never()).remove();
         verify(f.session, never()).save();
+    }
+
+    private static byte[] concat(byte[] a, byte[] b) {
+        byte[] all = java.util.Arrays.copyOf(a, a.length + b.length);
+        System.arraycopy(b, 0, all, a.length, b.length);
+        return all;
     }
 
     @Test

@@ -48,17 +48,19 @@ import java.io.InputStream;
  * File.type}; but the same primitive lets an author store an SVG/HTML file (with a spoofed image
  * mime) <em>anywhere</em> in the subtree, not only under {@code icon}/{@code screenshots}.</p>
  *
- * <p>The listener is therefore scoped by <b>node structure, not path string</b>: it sniffs any
- * {@code jnt:resource} whose containing {@code jnt:file} sits under a {@code jmix:forgeElement}
- * node, and, running as system:</p>
+ * <p>It sniffs any {@code jnt:resource} whose containing {@code jnt:file} is in the module repository
+ * and, running as system:</p>
  * <ul>
- *   <li><b>Everywhere in the subtree</b> — removes a file that is script-capable (a declared
- *       SVG/HTML/XML mime, or bytes that sniff as markup), so a planted script file can never be
- *       served inline. Legitimate binaries (the module JAR/tgz artifact, rasters, …) are untouched
- *       because they are neither markup nor a script-capable mime.</li>
- *   <li><b>In the {@code icon}/{@code screenshots} media folders</b> — additionally requires a real
- *       raster: a non-raster upload is removed and a mismatched declared mime is pinned to the
- *       detected type.</li>
+ *   <li><b>Everywhere in the module repository</b> — removes any SVG or HTML file, honestly declared
+ *       or not: SVG and HTML are never accepted as module media (JSTORE-SEC-012). A file is SVG or
+ *       HTML by its declared mime, its name ({@code .svg}, {@code .html}, …) or its content (an
+ *       {@code <svg}, {@code <!doctype html}, {@code <html} or {@code <script} token). Any other
+ *       script-capable file (an XML mime, or bytes that start with markup) is removed too. Legitimate
+ *       binaries (the module JAR/tgz artifact, rasters, …) are untouched.</li>
+ *   <li><b>In the {@code icon}/{@code screenshots} folders of a forge element</b> (scoped by
+ *       <b>node structure, not path string</b>: the file must sit under a {@code jmix:forgeElement})
+ *       — additionally requires a real raster: a non-raster upload is removed and a mismatched
+ *       declared mime is pinned to the detected type.</li>
  * </ul>
  *
  * <p>Media is written in both workspaces: authors edit in the default workspace, and store developers
@@ -172,26 +174,29 @@ public abstract class ForgeMediaMimeListener extends DefaultEventListener {
             return;
         }
         final JCRNodeWrapper file = resource.getParent();
-        // Structural scope: only files that live under a forge element (module/package) are the
-        // author-writable surface. This replaces the former "/icon//screenshots/" path matching so a
-        // file planted elsewhere in the subtree is covered too (SECURITY-571 #61).
-        if (!file.isNodeType(JNT_FILE) || !isUnderForgeElement(file)) {
+        if (!file.isNodeType(JNT_FILE) || !file.getPath().contains(MODULES_REPOSITORY)) {
             return;
         }
         final byte[] header = readHeader(resource);
         final String declared = resource.hasProperty(PROP_MIME_TYPE)
                 ? resource.getProperty(PROP_MIME_TYPE).getString() : null;
 
-        // Rule A (any location under the forge element): a file that could be served inline as
-        // script — a declared SVG/HTML/XML mime, or bytes that sniff as markup — is removed. Legit
-        // binaries (module artifact, rasters) are neither, so they are left untouched.
-        if (MagicByteImageValidator.isScriptCapableMime(declared)
-                || MagicByteImageValidator.looksLikeMarkup(header)) {
-            LOGGER.warn("ForgeMediaMimeListener: removed script-capable upload '{}' (declared mime '{}')",
+        // Rule A (anywhere in the module repository): SVG and HTML are never accepted as module media
+        // (JSTORE-SEC-012), whether declared, named or sniffed, and nothing a browser could render as
+        // script is kept either. Legit binaries (module artifact, rasters) match none of these checks.
+        if (isRefusedMarkup(file, declared, header)) {
+            LOGGER.warn("ForgeMediaMimeListener: removed SVG/HTML or script-capable file '{}' (declared mime '{}')",
                     ActionSecurityUtils.sanitizeForLog(file.getPath()),
                     ActionSecurityUtils.sanitizeForLog(declared));
             file.remove();
             session.save();
+            return;
+        }
+
+        // Structural scope of the raster rule: only files that live under a forge element (module/package)
+        // are author media. This replaces the former "/icon//screenshots/" path matching so a file planted
+        // elsewhere in the subtree is covered too (SECURITY-571 #61).
+        if (!isUnderForgeElement(file)) {
             return;
         }
 
@@ -212,6 +217,19 @@ public abstract class ForgeMediaMimeListener extends DefaultEventListener {
                         ActionSecurityUtils.sanitizeForLog(declared), detected);
             }
         }
+    }
+
+    /**
+     * True when the file is SVG or HTML by its declared mime, its name or its content, or is otherwise
+     * script-capable (an XML mime, or bytes that start with markup). The content token sniff does not
+     * apply to an archive (a module JAR or tgz), whose stored entries may hold HTML text.
+     */
+    private static boolean isRefusedMarkup(JCRNodeWrapper file, String declared, byte[] header) {
+        return MagicByteImageValidator.isScriptCapableMime(declared)
+                || MagicByteImageValidator.looksLikeMarkup(header)
+                || MagicByteImageValidator.isSvgOrHtmlName(file.getName())
+                || (!MagicByteImageValidator.isArchive(header)
+                        && MagicByteImageValidator.containsSvgOrHtmlMarkup(header));
     }
 
     /**

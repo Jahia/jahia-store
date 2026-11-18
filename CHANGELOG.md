@@ -18,16 +18,28 @@
   only the edit workspace, but store developers write in live through the store front-end, and it
   stopped looking for the module after 32 parent nodes, so a file nested deeper was skipped. Such a
   file stayed in live and ran as script on the store's origin when a visitor opened it. The guard now
-  watches both workspaces and has no depth limit. The upload action also stores a package JAR or a
+  watches both workspaces and has no depth limit.
+
+  SVG and HTML are no longer accepted as module media at all, even when they are declared honestly.
+  The guard removes any file in `contents/modules-repository` that is SVG or HTML by its declared MIME
+  type, by its extension (`.svg`, `.svgz`, `.html`, `.htm`, `.xhtml`, `.xht`, `.shtml`), or by its
+  content (`<svg`, `<!doctype html`, `<html` or `<script` in its first 512 bytes; this content check
+  does not apply to module archives). Module icons and screenshots must be PNG, JPEG, GIF or WebP.
+
+  The upload action also stores a package JAR or a
   JavaScript module tgz with the content type of its extension (`application/java-archive`,
   `application/gzip`) instead of the one the browser sent, and refuses a file that does not start with
   the zip or gzip signature (`forge.uploadJar.error.wrong.format`).
 
-  **Who is impacted:** every installation where store developers can upload.
+  **Who is impacted:** every installation where store developers can upload, and every module that
+  uses an SVG icon or screenshot: a new SVG upload is removed, and its owner must upload a raster
+  instead.
 
   **What to do:** nothing for new files. The guard checks a file when it is written, so a file planted
-  before the upgrade stays: look for files under `contents/modules-repository` in live whose
-  `jcr:mimeType` is an SVG, HTML or XML type, or whose content starts with `<`, and delete them.
+  before the upgrade stays: look for files under `contents/modules-repository`, in edit and in live,
+  whose `jcr:mimeType` is an SVG, HTML or XML type, whose name has an SVG or HTML extension, or whose
+  content starts with `<`, and delete them. Deploy `jahia-store-template` with the same rule, which
+  refuses SVG and HTML in the icon and screenshot upload form.
 
 ### Added
 

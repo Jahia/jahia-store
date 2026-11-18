@@ -23,6 +23,8 @@
  */
 package org.jahia.modules.forge.actions;
 
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import org.apache.commons.lang.StringUtils;
@@ -66,6 +68,13 @@ public final class MagicByteImageValidator {
     private static final Set<String> SCRIPT_CAPABLE_MIMES = Set.of(
             "image/svg+xml", "image/svg-xml", "text/html", "application/xhtml+xml",
             "text/xml", "application/xml");
+
+    /** File extensions of SVG and HTML documents, lower-cased. */
+    private static final Set<String> SVG_HTML_EXTENSIONS =
+            Set.of("svg", "svgz", "html", "htm", "xhtml", "xht", "shtml");
+
+    /** Lower-cased tokens that mark SVG or HTML content. */
+    private static final List<String> SVG_HTML_TOKENS = List.of("<svg", "<!doctype html", "<html", "<script");
 
     private MagicByteImageValidator() {
         // utility class - prevent instantiation
@@ -144,6 +153,46 @@ public final class MagicByteImageValidator {
             }
         }
         return i < header.length && (header[i] & 0xFF) == 0x3C; // '<'
+    }
+
+    /**
+     * True when {@code name} has an SVG or HTML file extension ({@code .svg}, {@code .svgz}, {@code .html},
+     * {@code .htm}, {@code .xhtml}, {@code .xht}, {@code .shtml}), case-insensitively. SVG and HTML are never
+     * accepted as module media (JSTORE-SEC-012), whatever their declared mime or bytes.
+     */
+    public static boolean isSvgOrHtmlName(String name) {
+        if (name == null || name.indexOf('.') < 0) {
+            return false;
+        }
+        return SVG_HTML_EXTENSIONS.contains(StringUtils.substringAfterLast(name, ".").toLowerCase(Locale.ROOT));
+    }
+
+    /**
+     * True when the bytes contain an SVG or HTML token ({@code <svg}, {@code <!doctype html}, {@code <html},
+     * {@code <script}) anywhere, case-insensitively, not only at the start: a file that starts with other
+     * bytes (a raster header, text) and carries markup further on is refused too (JSTORE-SEC-012).
+     */
+    public static boolean containsSvgOrHtmlMarkup(byte[] header) {
+        if (header == null) {
+            return false;
+        }
+        // ISO-8859-1 maps every byte to one char, so the tokens are found whatever the encoding of the rest.
+        final String text = new String(header, StandardCharsets.ISO_8859_1).toLowerCase(Locale.ROOT);
+        for (String token : SVG_HTML_TOKENS) {
+            if (text.contains(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * True when the bytes start with a zip ({@code PK 03 04}: JAR, WAR) or gzip ({@code 1F 8B}: tgz) signature.
+     * A module artifact is compressed, but a stored (uncompressed) entry may hold HTML text: the markup token
+     * sniff does not apply to it. Such a file is never rendered as markup by a browser.
+     */
+    public static boolean isArchive(byte[] header) {
+        return header != null && (startsWith(header, 0x50, 0x4B, 0x03, 0x04) || startsWith(header, 0x1F, 0x8B));
     }
 
     private static boolean isWebp(byte[] header) {

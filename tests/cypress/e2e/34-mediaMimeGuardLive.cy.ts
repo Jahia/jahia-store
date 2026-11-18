@@ -12,7 +12,8 @@ import {createSite, deleteSite, publishAndWaitJobEnding} from '@jahia/cypress';
  *   <li><b>S2</b> — the same file nested 40 folders under the module's {@code icon} folder, in LIVE.
  *       Before the fix the ancestor walk stopped after 32 nodes and skipped the file.</li>
  * </ul>
- * A genuine raster written in LIVE is the control and must survive. The writes run as root: the guard
+ * An honestly declared SVG ({@code image/svg+xml}, {@code logo.svg}) is removed too: SVG and HTML are
+ * never accepted as module media. A genuine raster written in LIVE is the control and must survive. The writes run as root: the guard
  * does not depend on who writes, only on where. Waits are polls on node removal, not fixed sleeps.
  */
 describe('Media MIME guard covers the live workspace and deep nesting (JSTORE-SEC-012)', () => {
@@ -99,6 +100,12 @@ describe('Media MIME guard covers the live workspace and deep nesting (JSTORE-SE
 
         waitUntilRemovedFromLive(`${iconFolder}/evil.png`);
         existsInLive(`${iconFolder}/logo.webp`).should('equal', true);
+    });
+
+    it('removes an honestly declared SVG: SVG and HTML are never accepted as module media', () => {
+        uploadInLive('evil-markup.svg', iconFolder, 'logo.svg', 'image/svg+xml');
+
+        waitUntilRemovedFromLive(`${iconFolder}/logo.svg`);
     });
 
     it('S2: removes a spoofed SVG nested 40 folders deep under the module', () => {
