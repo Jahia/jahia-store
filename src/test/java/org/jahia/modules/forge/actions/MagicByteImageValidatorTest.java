@@ -146,4 +146,47 @@ class MagicByteImageValidatorTest {
         assertThat(MagicByteImageValidator.looksLikeMarkup(null)).isFalse();
         assertThat(MagicByteImageValidator.looksLikeMarkup("plain text".getBytes(StandardCharsets.UTF_8))).isFalse();
     }
+
+    // ---- JSTORE-SEC-012 product rule: SVG and HTML are never accepted as module media -------------
+
+    @ParameterizedTest
+    @ValueSource(strings = {"a.svg", "a.SVG", "a.svgz", "a.html", "a.htm", "a.xhtml", "a.xht", "a.shtml", "x.png.svg"})
+    @DisplayName("SVG/HTML file names are recognised, case-insensitively")
+    void svgOrHtmlNames(String name) {
+        assertThat(MagicByteImageValidator.isSvgOrHtmlName(name)).isTrue();
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"", "a.png", "a.jpg", "a.jpeg", "a.gif", "a.webp", "svg", "a.svg.png", "html", "a.jar"})
+    @DisplayName("other file names are not SVG/HTML names")
+    void otherNames(String name) {
+        assertThat(MagicByteImageValidator.isSvgOrHtmlName(name)).isFalse();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"<svg", "  <SVG ", "junk<!doctype html>", "junk<!DOCTYPE HTML>", "x<html>", "x<HtMl", "x<script>",
+            "x<SCRIPT src=a>"})
+    @DisplayName("SVG/HTML markup tokens are found anywhere in the sniffed bytes, case-insensitively")
+    void markupTokens(String content) {
+        assertThat(MagicByteImageValidator.containsSvgOrHtmlMarkup(content.getBytes(StandardCharsets.UTF_8))).isTrue();
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"", "plain text", "<?xml version=\"1.0\"?><note/>", "a < b and svg", "<scrip", "<htm"})
+    @DisplayName("bytes without an SVG/HTML token are not flagged by the token sniff")
+    void noMarkupTokens(String content) {
+        byte[] bytes = content == null ? null : content.getBytes(StandardCharsets.UTF_8);
+        assertThat(MagicByteImageValidator.containsSvgOrHtmlMarkup(bytes)).isFalse();
+    }
+
+    @Test
+    @DisplayName("zip and gzip archives are recognised by their signature")
+    void archives() {
+        assertThat(MagicByteImageValidator.isArchive(withHeader(0x50, 0x4B, 0x03, 0x04))).isTrue();
+        assertThat(MagicByteImageValidator.isArchive(withHeader(0x1F, 0x8B, 0x08))).isTrue();
+        assertThat(MagicByteImageValidator.isArchive("<svg".getBytes(StandardCharsets.UTF_8))).isFalse();
+        assertThat(MagicByteImageValidator.isArchive(null)).isFalse();
+    }
 }
