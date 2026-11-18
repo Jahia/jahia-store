@@ -4,6 +4,12 @@
 <%@ taglib prefix="jcr" uri="http://www.jahia.org/tags/jcr" %>
 <%@ taglib prefix="template" uri="http://www.jahia.org/tags/templateLib" %>
 <%@ taglib prefix="fmt" uri="http://java.sun.com/jsp/jstl/fmt" %>
+<%@ page import="org.jahia.modules.forge.visibility.StoreVisibility" %>
+<%@ page import="org.jahia.services.content.JCRNodeWrapper" %>
+<%-- An item is listed only when its version AND its module are published: the store's shared rule
+     (StoreVisibility.isPublished), the rule of moduleList.json. Testing the version flag alone listed the
+     published versions of unpublished modules, with their download links (JSTORE-SEC-005, SEC-1015).
+     No owner exception: the feed is public and cached, it lists what everyone may see. --%>
 
 <template:addCacheDependency flushOnPathMatchingRegexp="\Q${currentNode.path}\E/.*"/>
 <?xml version="1.0" encoding="UTF-8"?>
@@ -19,7 +25,8 @@
         <description>New Jahia modules.</description>
             <jcr:jqom var="result" statement="SELECT * FROM [jnt:forgeModuleVersion] as module WHERE ISDESCENDANTNODE(module,'${currentNode.path}') ORDER BY module.[jcr:lastModified] DESC"/>
             <c:forEach items="${result.nodes}" var="version">
-                <c:if test="${version.properties.published.boolean}">
+                <% pageContext.setAttribute("listed", StoreVisibility.isPublished((JCRNodeWrapper) pageContext.getAttribute("version"))); %>
+                <c:if test="${listed}">
                     <c:set var="module" value="${version.parent}"/>
                     <c:set var="files" value="${jcr:getChildrenOfType(version, 'jnt:file')}"/>
                     <%-- Reset per version so an unsafe-coordinate skip below can't leak the previous

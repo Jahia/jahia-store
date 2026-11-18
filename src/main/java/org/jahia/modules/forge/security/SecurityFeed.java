@@ -3,6 +3,7 @@ package org.jahia.modules.forge.security;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jahia.api.Constants;
+import org.jahia.modules.forge.visibility.StoreVisibility;
 import org.jahia.services.content.JCRNodeIteratorWrapper;
 import org.jahia.services.content.JCRNodeWrapper;
 import org.jahia.services.content.JCRPropertyWrapper;
@@ -92,6 +93,18 @@ public final class SecurityFeed {
     }
 
     /**
+     * The feed is served only at a site's {@code modules-repository} folder (JSTORE-SEC-005). The view is
+     * defined on every {@code jnt:contentFolder}, and it reads the site's advisories with a system session,
+     * so on any other folder it would hand them to whoever can read that folder. The view answers 404 there.
+     *
+     * @param node the folder the view is rendered on
+     * @return true when the node is its site's {@code modules-repository} folder
+     */
+    public static boolean servesFeedAt(JCRNodeWrapper node) {
+        return StoreVisibility.isModulesRepository(node);
+    }
+
+    /**
      * Entry point for the {@code contentFolder.securityUpdates} JSP view.
      *
      * @param repositoryNode the site's {@code modules-repository} folder, in the caller's live session
@@ -108,6 +121,9 @@ public final class SecurityFeed {
      * @throws RepositoryException when the repository cannot be read or a published advisory is invalid
      */
     public String build(JCRNodeWrapper repositoryNode) throws RepositoryException {
+        if (!servesFeedAt(repositoryNode)) {
+            throw new RepositoryException("The security feed is served only at a site's modules-repository folder");
+        }
         String siteKey = repositoryNode.getResolveSite().getSiteKey();
         Map<String, Object> feed = new LinkedHashMap<>();
         feed.put("schemaVersion", SCHEMA_VERSION);
