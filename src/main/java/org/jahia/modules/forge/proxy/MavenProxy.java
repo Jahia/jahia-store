@@ -246,7 +246,10 @@ public class MavenProxy extends HttpServlet {
             return null;
         }
         final JCRNodeWrapper module = session.getNode(modulePath);
-        if (!module.isNodeType("jnt:forgeModule")) {
+        // Only a module that an external provider serves declares its artefacts. A module of the
+        // default provider may still carry a stale `url` from before 5.0.0, which the migration
+        // script drops and which must never be served.
+        if (!module.isNodeType("jnt:forgeModule") || module.getProvider().isDefault()) {
             return null;
         }
         for (JCRNodeWrapper child : module.getNodes()) {
