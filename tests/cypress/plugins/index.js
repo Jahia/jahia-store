@@ -20,6 +20,9 @@ module.exports = (on, config) => {
     require('cypress-terminal-report/src/installLogsPrinter')(on);
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     require('@jahia/cypress/dist/plugins/registerPlugins').registerPlugins(on, config);
+    // A git repository the store reads, built as files (see gitRepository.js).
+    const {buildGitRepositoryTask} = require('./gitRepository');
+    on('task', {buildGitRepository: buildGitRepositoryTask(config.projectRoot)});
 
     return config;
 };

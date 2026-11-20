@@ -1,0 +1,5 @@
+mutation ForgeUnregisterGitModule($siteKey: String!, $name: String!) {
+    forge {
+        unregisterGitModule(siteKey: $siteKey, name: $name)
+    }
+}

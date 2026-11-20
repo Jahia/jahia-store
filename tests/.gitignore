@@ -10,3 +10,5 @@ nyc_output
 results/
 run-artifacts
 .yarn/
+# The git repositories a spec builds to upload (cypress/plugins/gitRepository.js).
+cypress/fixtures/git/

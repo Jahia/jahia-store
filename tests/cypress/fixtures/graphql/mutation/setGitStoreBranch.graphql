@@ -1,0 +1,9 @@
+mutation SetGitStoreBranch($branch: String!) {
+    admin {
+        jahia {
+            configuration(pid: "org.jahia.modules.forge.git") {
+                value(name: "branch", value: $branch)
+            }
+        }
+    }
+}

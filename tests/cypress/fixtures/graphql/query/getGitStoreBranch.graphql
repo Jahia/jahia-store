@@ -1,0 +1,9 @@
+query GetGitStoreBranch {
+    admin {
+        jahia {
+            configuration(pid: "org.jahia.modules.forge.git") {
+                value(name: "branch")
+            }
+        }
+    }
+}

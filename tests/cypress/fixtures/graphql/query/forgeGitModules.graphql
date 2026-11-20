@@ -1,0 +1,10 @@
+query ForgeGitModules($siteKey: String!) {
+    forge {
+        gitModules(siteKey: $siteKey) {
+            name
+            gitUrl
+            registeredBy
+            mountStatus
+        }
+    }
+}
