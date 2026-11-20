@@ -72,9 +72,11 @@ public class ValidationService {
         validators.remove(validator);
     }
 
-    /** The registered checks, in registration order. */
+    /** The registered checks, in the order of their steps. */
     public List<ModuleValidator> getValidators() {
-        return new ArrayList<>(validators);
+        List<ModuleValidator> sorted = new ArrayList<>(validators);
+        sorted.sort((a, b) -> a.getOrder() != b.getOrder() ? Integer.compare(a.getOrder(), b.getOrder()) : a.getKey().compareTo(b.getKey()));
+        return sorted;
     }
 
     public ValidationSettings getSettings() {

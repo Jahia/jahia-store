@@ -218,14 +218,39 @@ export class VersionEntry {
         return this;
     }
 
-    /** One check of the validation block, by its key, with its status and a comment it shows. */
-    expectCheck(checkKey: string, status: string, comment?: string): VersionEntry {
-        this.entry().find(`[data-validation-check="${checkKey}"] [data-validation-status]`).should('have.attr', 'data-validation-status', status);
+    /**
+     * One step of the validation chain, by the key of its check: grey while it is to do, orange while
+     * it is in progress, green once done, red once failed; with a comment the step shows.
+     */
+    expectStep(checkKey: string, state: 'todo' | 'progress' | 'done' | 'failed', comment?: string): VersionEntry {
+        this.entry().find(`[data-validation-step="${checkKey}"]`).should('have.attr', 'data-step-state', state);
         if (comment) {
-            this.entry().find(`[data-validation-check="${checkKey}"]`).should('contain.text', comment);
+            this.entry().find(`[data-validation-step="${checkKey}"]`).should('contain.text', comment);
         }
 
         return this;
+    }
+
+    /** The steps of the chain, in order, each with its name and its description. */
+    expectSteps(steps: {key: string; name: string; description: string}[]): VersionEntry {
+        this.entry()
+            .find('[data-validation-steps] [data-validation-step]')
+            .should('have.length', steps.length + 1)
+            .each(($step, index) => {
+                if (index === steps.length) {
+                    expect($step.attr('data-validation-step')).to.equal('validated');
+                    return;
+                }
+
+                expect($step.attr('data-validation-step')).to.equal(steps[index].key);
+                expect($step.text()).to.contain(steps[index].name).and.to.contain(steps[index].description);
+            });
+        return this;
+    }
+
+    /** The last step of the chain, "Validated", in its state. */
+    expectValidated(state: 'todo' | 'done' | 'failed'): VersionEntry {
+        return this.expectStep('validated', state);
     }
 
     /** The owner cannot publish the version yet: the publish control gives way to the reason. */
@@ -241,16 +266,14 @@ export class VersionEntry {
         return this;
     }
 
-    /** A check waits for a human: the Validate button gives way to "Waiting for review", and nothing runs. */
-    expectValidateWaiting(): VersionEntry {
-        this.entry()
-            .find(`[data-request-validation="${this.number}"][data-request-validation-waiting]`)
-            .should('be.disabled')
-            .and('contain.text', 'Waiting for review');
+    /** A step waits for a human: the chain offers nothing to start until the answer is recorded. */
+    expectNoValidateControl(): VersionEntry {
+        this.entry().find('[data-validation-steps]').should('exist');
+        this.entry().find(`[data-request-validation="${this.number}"]`).should('not.exist');
         return this;
     }
 
-    /** Press "Validate": the store runs the checks again and the page reloads. */
+    /** Press "Start the validation" or "Validate again": the store runs the checks and the page reloads. */
     validate(): VersionEntry {
         // Stamp the window, click, and wait until the stamp is gone: a reload replaces the window,
         // whereas a DOM node would detach mid-navigation.

@@ -14,14 +14,15 @@ enters the store.
 
 A check is an OSGi service of `ModuleValidator`, which the store collects: whoever registers one
 adds a check to every validation. A check has a key, stable across releases, a label that says
-what the check means to a developer, and a method that validates one version. The label never
-names the tool behind the check.
+what the check means to a developer, a description of one sentence on what it looks at, an order
+that places it among the steps of a version, and a method that validates one version. The label
+never names the tool behind the check.
 
-| Key | Label | What it is |
-|---|---|---|
-| `quality` | Code quality | A quality analysis of the archive. Not wired yet: every version passes, and the comment says so. |
-| `code-review` | Code review | A review of the archive by an assistant, from a prompt. |
-| `security` | Security | A security scan of the archive by an assistant, from a prompt. |
+| Key | Order | Label | What it is |
+|---|---|---|---|
+| `quality` | 10 | Code quality | A quality analysis of the archive. Not wired yet: every version passes, and the comment says so. |
+| `code-review` | 20 | Code review | A review of the archive by an assistant, from a prompt. |
+| `security` | 30 | Security | A security scan of the archive by an assistant, from a prompt. |
 
 A check answers one of:
 
@@ -58,7 +59,7 @@ is the store's own: no publication is involved.
 
 | Property of a check | Meaning |
 |---|---|
-| `checkKey`, `label` | The check. |
+| `checkKey`, `label`, `description`, `stepOrder` | The check, as its service declared it when the record was written. |
 | `status` | `pending`, `approved`, `review` or `rejected`. |
 | `comments` | What the check says. |
 | `prompt` | The prompt a human follows when the check waits for one. |
@@ -91,8 +92,8 @@ The validation of a version is requested:
 
 - by the store itself, when a version is uploaded, when a git-backed module is registered, and
   when it is refreshed with a version the store never validated;
-- by the owner of the module, who presses "Validate" on the version, or by a store
-  administrator; the button calls the GraphQL mutation `forge { requestValidation }`;
+- by the owner of the module, who starts the validation on the version, or by a store
+  administrator; the control calls the GraphQL mutation `forge { requestValidation }`;
 - by a process outside the store, which calls the same mutation with the credentials of the
   owner or of an administrator.
 
@@ -114,10 +115,13 @@ carries.
 
 ## The storefront
 
-The card of a version shows the validation to everyone: the status of the version, then one line
-per check with its label, its status and its comments. The owner of the module and an
-administrator get the "Validate" button on it, which reads "Waiting for review", and runs
-nothing, while a check waits for a human.
+The card of a version shows the validation to everyone as a chain of steps: one step per check,
+in the order of the checks, with its label, its description, its status and its comments, then a
+last step, "Validated". A step is grey while it has not run, orange while it waits for an answer,
+green once it passes and red once it fails; the last step turns green when every check passed,
+red when the version is rejected. A version never validated shows the steps of the store, all
+grey. The owner of the module and an administrator get the control that starts the validation,
+or runs it again once it is done; nothing is offered while a check waits for a human.
 
 The validation dashboard is the page `validations` of the site, which the seed of the template
 set creates, shown to administrators in their account menu. It lists the versions waiting for a

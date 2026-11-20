@@ -37,6 +37,14 @@ public interface ModuleValidator {
     /** What the check means to a developer, such as "Code quality", never the tool behind it. */
     String getLabel();
 
+    /** One sentence on what the check looks at, shown under its name on the steps of a version. */
+    String getDescription();
+
+    /** The place of the check among the steps of a version: a lower order runs and shows first. */
+    default int getOrder() {
+        return 100;
+    }
+
     /** Run the check on a version. A thrown exception reads as a check waiting for review, with the message. */
     ValidationResult validate(ModuleArtifact artifact);
 }

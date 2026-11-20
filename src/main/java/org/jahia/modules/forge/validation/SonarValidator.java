@@ -45,6 +45,16 @@ public class SonarValidator implements ModuleValidator {
     }
 
     @Override
+    public String getDescription() {
+        return "The quality gate of the archive: bugs, code smells and duplication.";
+    }
+
+    @Override
+    public int getOrder() {
+        return 10;
+    }
+
+    @Override
     public ValidationResult validate(ModuleArtifact artifact) {
         return ValidationResult.approved("Quality gate passed. The analysis of the archive is not wired yet: every version passes this check.");
     }

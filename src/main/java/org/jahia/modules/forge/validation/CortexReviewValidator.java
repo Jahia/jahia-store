@@ -47,4 +47,14 @@ public class CortexReviewValidator extends PromptValidator {
     public String getLabel() {
         return "Code review";
     }
+
+    @Override
+    public String getDescription() {
+        return "A review of what the archive ships, against the conventions of a Jahia module.";
+    }
+
+    @Override
+    public int getOrder() {
+        return 20;
+    }
 }

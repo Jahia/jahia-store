@@ -76,20 +76,26 @@ describe('A version is validated before it reaches the public', () => {
 
     it('the owner sees the version is not validated yet, and cannot publish it', () => {
         cy.login(developer.username, developer.password);
-        ModulePage.visit(siteKey, moduleName).openVersions().version(version).expectValidation('none').expectPublishBlocked();
+        ModulePage.visit(siteKey, moduleName).openVersions().version(version).expectValidation('none').expectValidated('todo').expectPublishBlocked();
     });
 
-    it('the owner asks for the validation: the quality check approves, the two assistant checks wait for a human', () => {
+    it('the owner starts the validation: the quality step is done, the two assistant steps are in progress', () => {
         cy.login(developer.username, developer.password);
         ModulePage.visit(siteKey, moduleName).openVersions().version(version).validate();
         ModulePage.visit(siteKey, moduleName)
             .openVersions()
             .version(version)
             .expectValidation('review')
-            .expectCheck('quality', 'approved', 'Quality gate passed')
-            .expectCheck('code-review', 'review')
-            .expectCheck('security', 'review')
-            .expectValidateWaiting()
+            .expectSteps([
+                {key: 'quality', name: 'Code quality', description: 'quality gate'},
+                {key: 'code-review', name: 'Code review', description: 'conventions of a Jahia module'},
+                {key: 'security', name: 'Security', description: 'known vulnerabilities'}
+            ])
+            .expectStep('quality', 'done', 'Quality gate passed')
+            .expectStep('code-review', 'progress')
+            .expectStep('security', 'progress')
+            .expectValidated('todo')
+            .expectNoValidateControl()
             .expectPublishBlocked();
     });
 
@@ -117,9 +123,18 @@ describe('A version is validated before it reaches the public', () => {
 
     it('once approved, the owner publishes the version and a visitor can download it', () => {
         cy.login(developer.username, developer.password);
-        ModulePage.visit(siteKey, moduleName).openVersions().version(version).expectValidation('approved').expectPublishControl().publish();
+        ModulePage.visit(siteKey, moduleName)
+            .openVersions()
+            .version(version)
+            .expectValidation('approved')
+            .expectStep('quality', 'done')
+            .expectStep('code-review', 'done')
+            .expectStep('security', 'done')
+            .expectValidated('done')
+            .expectPublishControl()
+            .publish();
         cy.logout();
-        ModulePage.visit(siteKey, moduleName).openVersions().version(version).expectValidation('approved');
+        ModulePage.visit(siteKey, moduleName).openVersions().version(version).expectValidation('approved').expectValidated('done');
         Catalogue.of(siteKey).expectVersions(moduleName, [version]);
     });
 

@@ -58,6 +58,8 @@ public final class ValidationRecords {
     static final String P_REASON = "reason";
     static final String P_CHECK_KEY = "checkKey";
     static final String P_LABEL = "label";
+    static final String P_DESCRIPTION = "description";
+    static final String P_STEP_ORDER = "stepOrder";
     static final String P_COMMENTS = "comments";
     static final String P_PROMPT = "prompt";
     static final String P_UPDATED_BY = "updatedBy";
@@ -92,11 +94,13 @@ public final class ValidationRecords {
         List<ValidationRecord.Check> checks = new ArrayList<>();
         for (JCRNodeWrapper child : node.getNodes()) {
             if (child.isNodeType(TYPE_CHECK)) {
-                checks.add(new ValidationRecord.Check(string(child, P_CHECK_KEY), string(child, P_LABEL),
+                checks.add(new ValidationRecord.Check(string(child, P_CHECK_KEY), string(child, P_LABEL), string(child, P_DESCRIPTION),
+                        child.hasProperty(P_STEP_ORDER) ? (int) child.getProperty(P_STEP_ORDER).getLong() : 100,
                         ValidationStatus.of(string(child, P_STATUS)), strings(child, P_COMMENTS), string(child, P_PROMPT),
                         string(child, P_UPDATED_BY), date(child, P_UPDATED_AT)));
             }
         }
+        checks.sort((a, b) -> a.getOrder() != b.getOrder() ? Integer.compare(a.getOrder(), b.getOrder()) : a.getKey().compareTo(b.getKey()));
         String siteKey = StringUtils.substringBetween(node.getPath(), JahiaSitesService.SITES_JCR_PATH + "/", "/");
         return new ValidationRecord(siteKey, string(node, P_MODULE), string(node, P_VERSION),
                 ValidationStatus.of(string(node, P_STATUS)), string(node, P_ARTIFACT_URL), string(node, P_REQUESTED_BY),
@@ -150,6 +154,8 @@ public final class ValidationRecords {
             JCRNodeWrapper check = record.addNode(validator.getKey(), TYPE_CHECK);
             check.setProperty(P_CHECK_KEY, validator.getKey());
             check.setProperty(P_LABEL, validator.getLabel());
+            check.setProperty(P_DESCRIPTION, StringUtils.defaultString(validator.getDescription()));
+            check.setProperty(P_STEP_ORDER, validator.getOrder());
             check.setProperty(P_STATUS, ValidationStatus.PENDING.key());
         }
         return record;

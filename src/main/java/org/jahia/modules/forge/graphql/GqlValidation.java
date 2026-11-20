@@ -61,6 +61,18 @@ public class GqlValidation {
         }
 
         @GraphQLField
+        @GraphQLDescription("One sentence on what the check looks at")
+        public String getDescription() {
+            return check.getDescription();
+        }
+
+        @GraphQLField
+        @GraphQLDescription("The place of the check among the steps of the version")
+        public Integer getOrder() {
+            return check.getOrder();
+        }
+
+        @GraphQLField
         @GraphQLDescription("pending, approved, review or rejected")
         public String getStatus() {
             return check.getStatus() == null ? null : check.getStatus().key();

@@ -35,15 +35,20 @@ public final class ValidationRecord {
     public static final class Check {
         private final String key;
         private final String label;
+        private final String description;
+        private final int order;
         private final ValidationStatus status;
         private final List<String> comments;
         private final String prompt;
         private final String updatedBy;
         private final Date updatedAt;
 
-        public Check(String key, String label, ValidationStatus status, List<String> comments, String prompt, String updatedBy, Date updatedAt) {
+        public Check(String key, String label, String description, int order, ValidationStatus status, List<String> comments,
+                     String prompt, String updatedBy, Date updatedAt) {
             this.key = key;
             this.label = label;
+            this.description = description;
+            this.order = order;
             this.status = status;
             this.comments = comments == null ? Collections.emptyList() : Collections.unmodifiableList(new ArrayList<>(comments));
             this.prompt = prompt;
@@ -57,6 +62,16 @@ public final class ValidationRecord {
 
         public String getLabel() {
             return label;
+        }
+
+        /** One sentence on what the check looks at, or null for a record written before the steps. */
+        public String getDescription() {
+            return description;
+        }
+
+        /** The place of the check among the steps. */
+        public int getOrder() {
+            return order;
         }
 
         public ValidationStatus getStatus() {

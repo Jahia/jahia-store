@@ -47,4 +47,14 @@ public class SecurityScanValidator extends PromptValidator {
     public String getLabel() {
         return "Security";
     }
+
+    @Override
+    public String getDescription() {
+        return "A security scan of the code and of the embedded libraries for known vulnerabilities.";
+    }
+
+    @Override
+    public int getOrder() {
+        return 30;
+    }
 }

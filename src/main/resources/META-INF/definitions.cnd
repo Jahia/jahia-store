@@ -155,6 +155,8 @@
 [jnt:forgeValidationCheck] > jnt:content
  - checkKey (string) indexed=no
  - label (string) indexed=no
+ - description (string) indexed=no
+ - stepOrder (long) indexed=no
  - status (string) indexed=no
  - comments (string) multiple indexed=no
  - prompt (string) indexed=no
