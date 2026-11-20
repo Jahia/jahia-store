@@ -66,6 +66,8 @@
  + screenshots (jnt:forgeScreenshotsList) = jnt:forgeScreenshotsList autocreated hidden
  + icon (jnt:folder)
  + video (jnt:videostreaming) = jnt:videostreaming
+ // The files the description shows, which a git-backed module reads from its repository.
+ + files (jnt:folder)
  + * (jnt:forgeModuleVersion)
 
 [jnt:forgePackage] > jnt:content, mix:title, jmix:editorialContent, jmix:tagged, jmix:categorized, jmix:forge, jmix:forgeElement, jmix:reviews, jmix:rating

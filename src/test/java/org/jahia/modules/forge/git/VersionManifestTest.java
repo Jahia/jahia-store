@@ -49,7 +49,7 @@ class VersionManifestTest {
 
         assertThat(version.getArtifactUrl()).isEqualTo("https://example.com/releases/1.2.0/my-module-1.2.0.jar");
         assertThat(version.getDate()).isEqualTo(Instant.parse("2026-03-04T00:00:00Z"));
-        assertThat(version.isAvailable()).isTrue();
+        assertThat(version.isDisabled()).isFalse();
         assertThat(version.getRequiredVersion()).isEqualTo("8.2.1.0");
         assertThat(version.getDependencies()).containsExactly("default", "search");
         assertThat(version.getNotesMarkdown()).contains("Added the thing");
@@ -68,12 +68,12 @@ class VersionManifestTest {
     }
 
     @Test
-    @DisplayName("available: false withdraws the version, and anything but a boolean is refused")
-    void availableFlag() {
-        assertThat(VersionManifest.parse("1.2.0", VALID.replace("date: 2026-03-04\n", "available: false\n")).isAvailable()).isFalse();
-        assertThat(VersionManifest.parse("1.2.0", VALID.replace("date: 2026-03-04\n", "available: yes\n")).isAvailable()).isTrue();
-        assertThatThrownBy(() -> VersionManifest.parse("1.2.0", VALID.replace("date: 2026-03-04\n", "available: maybe\n")))
-                .hasMessageContaining("'available'");
+    @DisplayName("disabled: true disables the version, and anything but a boolean is refused")
+    void disabledFlag() {
+        assertThat(VersionManifest.parse("1.2.0", VALID.replace("date: 2026-03-04\n", "disabled: true\n")).isDisabled()).isTrue();
+        assertThat(VersionManifest.parse("1.2.0", VALID.replace("date: 2026-03-04\n", "disabled: no\n")).isDisabled()).isFalse();
+        assertThatThrownBy(() -> VersionManifest.parse("1.2.0", VALID.replace("date: 2026-03-04\n", "disabled: maybe\n")))
+                .hasMessageContaining("'disabled'");
     }
 
     @Test

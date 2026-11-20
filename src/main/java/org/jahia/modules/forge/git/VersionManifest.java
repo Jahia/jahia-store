@@ -34,7 +34,7 @@ import java.util.List;
 
 /**
  * The content of the {@code VERSION.md} of one version, as docs/git-backed-modules.md states
- * it: the artefact URL, the availability, the date, the version-specific fields and the release
+ * it: the artefact URL, the disabled flag, the date, the version-specific fields and the release
  * notes. Immutable; built by {@link #parse}.
  */
 public final class VersionManifest {
@@ -42,23 +42,23 @@ public final class VersionManifest {
     static final String FILE_NAME = "VERSION.md";
     static final String FIELD_ARTIFACT = "artifact";
     static final String FIELD_DATE = "date";
-    static final String FIELD_AVAILABLE = "available";
+    static final String FIELD_DISABLED = "disabled";
     static final String FIELD_REQUIRED_VERSION = "requiredVersion";
     static final String FIELD_DEPENDENCIES = "dependencies";
     /** A placeholder the artefact URL may carry, replaced by the version number. */
     static final String VERSION_PLACEHOLDER = "{version}";
 
     private final String artifactUrl;
-    private final boolean available;
+    private final boolean disabled;
     private final Instant date;
     private final String requiredVersion;
     private final List<String> dependencies;
     private final String notesMarkdown;
 
-    private VersionManifest(String artifactUrl, boolean available, Instant date, String requiredVersion,
+    private VersionManifest(String artifactUrl, boolean disabled, Instant date, String requiredVersion,
                             List<String> dependencies, String notesMarkdown) {
         this.artifactUrl = artifactUrl;
-        this.available = available;
+        this.disabled = disabled;
         this.date = date;
         this.requiredVersion = requiredVersion;
         this.dependencies = dependencies == null ? Collections.emptyList() : Collections.unmodifiableList(dependencies);
@@ -74,7 +74,7 @@ public final class VersionManifest {
         FrontMatterDocument doc = FrontMatterDocument.parse(fileName, content);
         String artifact = doc.mandatory(FIELD_ARTIFACT).replace(VERSION_PLACEHOLDER, number);
         validateArtifact(fileName, artifact);
-        return new VersionManifest(artifact, doc.bool(FIELD_AVAILABLE, true), date(fileName, doc.optional(FIELD_DATE)),
+        return new VersionManifest(artifact, doc.bool(FIELD_DISABLED, false), date(fileName, doc.optional(FIELD_DATE)),
                 doc.optional(FIELD_REQUIRED_VERSION), doc.stringList(FIELD_DEPENDENCIES), doc.getBody());
     }
 
@@ -108,9 +108,9 @@ public final class VersionManifest {
         return artifactUrl;
     }
 
-    /** False when the file withdraws the version from the store. */
-    public boolean isAvailable() {
-        return available;
+    /** True when the file disables the version: the store shows it to the editors of the module only. */
+    public boolean isDisabled() {
+        return disabled;
     }
 
     /** The release date, or null when the file states none. */

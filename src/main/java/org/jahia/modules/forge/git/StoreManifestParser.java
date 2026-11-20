@@ -98,7 +98,7 @@ public final class StoreManifestParser {
                 doc.optional(FIELD_LICENSE), doc.repositoryPath(FIELD_ICON), doc.repositoryPaths(FIELD_SCREENSHOTS),
                 doc.optional(FIELD_AUTHOR), doc.optional(FIELD_AUTHOR_URL), doc.optional(FIELD_AUTHOR_EMAIL),
                 doc.optional(FIELD_REQUIRED_VERSION), doc.stringList(FIELD_DEPENDENCIES),
-                Markdown.toHtml(description.toString()), versions);
+                description.toString(), versions);
     }
 
     private static StoreManifest.VersionLink versionLink(String number, String target, Set<String> seen) {

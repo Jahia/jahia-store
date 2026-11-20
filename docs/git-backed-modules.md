@@ -63,7 +63,8 @@ The description of the module, in Markdown.
 
 The `## Versions` section lists one version per list item: a link whose text is the version
 number and whose target is the folder of that version, relative to `STORE.md`. The section is
-not part of the description. A version number holds letters, digits, `.`, `_` and `-`, as a
+not part of the description. A relative image or link in the description names a file of the
+repository, relative to its root, and the store serves that file beside the module. A version number holds letters, digits, `.`, `_` and `-`, as a
 Maven version does. A module with no `## Versions` section has no version yet.
 
 A repository that lacks `STORE.md` on the store branch, lacks a mandatory field, or names a
@@ -78,7 +79,7 @@ the images and other files that the release notes show.
 ---
 artifact: https://github.com/example/my-module/releases/download/v1.2.0/my-module-1.2.0.jar
 date: 2026-03-04
-available: true
+disabled: false
 requiredVersion: 8.2.1.0
 dependencies:
   - default
@@ -93,7 +94,7 @@ dependencies:
 |---|---|---|
 | `artifact` | yes | The URL of the artefact of the version: absolute, `http` or `https`. The store never guesses it. |
 | `date` | no | The release date, `YYYY-MM-DD`. The date of the tip of the store branch otherwise. |
-| `available` | no | `false` withdraws the version: the store lists nothing of it. `true` by default. |
+| `disabled` | no | `true` disables the version: the store serves it unpublished, so the public, the catalogue JSON and the download link ignore it, and the editors of the module see it marked as disabled. `false` by default. |
 | `requiredVersion` | no | The lowest Jahia version this version runs on. The value of `STORE.md` otherwise. |
 | `dependencies` | no | The Jahia modules this version depends on. The value of `STORE.md` otherwise. |
 
@@ -111,18 +112,20 @@ The data source serves one module per registration. The root of the provider is 
 | Path in the provider | Node type | Source |
 |---|---|---|
 | `/` | `jnt:forgeModule` | `STORE.md`. |
-| `/<version>` | `jnt:forgeModuleVersion` | One per available version of the `## Versions` section. |
+| `/<version>` | `jnt:forgeModuleVersion` | One per version of the `## Versions` section, the disabled ones included. |
 | `/<version>/<file>` | `jnt:file` | A file of the folder of the version, other than its Markdown files. |
 | `/icon` | `jnt:folder` | Always present. |
 | `/icon/<file>` | `jnt:file` | The file that the `icon` field names, when it names one. |
 | `/screenshots` | `jnt:forgeScreenshotsList` | Always present. |
 | `/screenshots/<file>` | `jnt:file` | One per file that the `screenshots` field names. |
+| `/files` | `jnt:folder` | Always present. |
+| `/files/<file>` | `jnt:file` | One per file the description shows, under its base name. |
 
 | Property of `jnt:forgeModule` | Source |
 |---|---|
 | `jcr:title` | `title` |
 | `groupId` | `groupId` |
-| `description` | The Markdown body of `STORE.md` without its `## Versions` section, rendered to HTML. |
+| `description` | The Markdown body of `STORE.md` without its `## Versions` section, rendered to HTML. A relative image or link points to the file served under `/files`. |
 | `license` | `license` |
 | `authorURL`, `authorEmail` | `authorUrl`, `authorEmail` |
 | `codeRepository` | The URL of the repository. |
@@ -137,7 +140,7 @@ The data source serves one module per registration. The root of the provider is 
 | `changeLog` | The release notes, rendered to HTML. A relative link points to the file served beside the version. |
 | `references` | `dependencies` of `VERSION.md`, or of `STORE.md`. |
 | `uploadDate` | `date` of `VERSION.md`, or the date of the tip of the store branch. |
-| `published` | `true`. |
+| `published` | `false` when `VERSION.md` says `disabled: true`, `true` otherwise. |
 
 The i18n properties (`description`, `license`) hold the same value in every language.
 
@@ -166,6 +169,9 @@ a property from a definition it has deployed.
 Two entry points create the node, and both read the repository first and refuse one that fails
 the contract, with the reason:
 
+The "My modules" page marks a git-backed module with a "Git" badge, so a developer tells it
+from the modules they uploaded.
+
 - A store developer, from the "My modules" page of the storefront, posts the URL to the action
   `<modules-repository>.registerGitModule.do` over XMLHttpRequest. The action requires the
   `jahiaForgeUploadModule` permission on the repository, creates the node in a system session,
@@ -176,6 +182,14 @@ the contract, with the reason:
   administration mutation too, and the query `forge { gitModules }` lists the registrations of
   a site. `forge { refreshGitModule }` is open to the developer who registered the module as
   well, as the next section states.
+
+### Removal
+
+A registration is removed the way it was made: the developer who registered the module, or a
+store administrator, presses "Remove from the store" on the page of the module, which calls the
+action `<module>.unregisterGitModule.do` over XMLHttpRequest, and an administrator calls the
+GraphQL mutation `forge { unregisterGitModule }`. The mount point node goes, and the repository
+is untouched. A local module is deleted as a node from the same page, by its owner.
 
 ## Refresh
 

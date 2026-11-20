@@ -64,12 +64,12 @@ public final class StoreManifest {
     private final String authorEmail;
     private final String requiredVersion;
     private final List<String> dependencies;
-    private final String descriptionHtml;
+    private final String descriptionMarkdown;
     private final List<VersionLink> versions;
 
     StoreManifest(String name, String groupId, String title, String license, String icon, List<String> screenshots,
                   String author, String authorUrl, String authorEmail, String requiredVersion,
-                  List<String> dependencies, String descriptionHtml, List<VersionLink> versions) {
+                  List<String> dependencies, String descriptionMarkdown, List<VersionLink> versions) {
         this.name = name;
         this.groupId = groupId;
         this.title = title;
@@ -81,7 +81,7 @@ public final class StoreManifest {
         this.authorEmail = authorEmail;
         this.requiredVersion = requiredVersion;
         this.dependencies = dependencies == null ? Collections.emptyList() : Collections.unmodifiableList(dependencies);
-        this.descriptionHtml = descriptionHtml;
+        this.descriptionMarkdown = descriptionMarkdown == null ? "" : descriptionMarkdown;
         this.versions = versions == null ? Collections.emptyList() : Collections.unmodifiableList(versions);
     }
 
@@ -133,9 +133,14 @@ public final class StoreManifest {
         return dependencies;
     }
 
-    /** The Markdown body without its {@code ## Versions} section, rendered to HTML; never null. */
+    /** The Markdown body without its {@code ## Versions} section; never null. */
+    public String getDescriptionMarkdown() {
+        return descriptionMarkdown;
+    }
+
+    /** The description rendered to HTML, with its relative links as they are; never null. */
     public String getDescriptionHtml() {
-        return descriptionHtml;
+        return Markdown.toHtml(descriptionMarkdown);
     }
 
     /** The versions of the {@code ## Versions} section, in the order of the file. */

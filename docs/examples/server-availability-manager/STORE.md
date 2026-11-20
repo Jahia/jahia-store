@@ -3,6 +3,7 @@ name: server-availability-manager
 groupId: org.jahia.modules
 title: Server Availability Manager
 license: JSEL
+icon: store/icon.png
 author: Jahia Solutions Group
 authorUrl: https://www.jahia.com
 requiredVersion: 8.2.0.0
@@ -11,7 +12,11 @@ dependencies:
 ---
 
 The Server Availability Manager extends the GraphQL API of Jahia with server monitoring, server
-availability and maintenance operations for complex containerized environments:
+availability and maintenance operations for complex containerized environments.
+
+![The probes feed one health check, served by GraphQL and by a servlet](store/overview.svg)
+
+It provides:
 
 - the status of the health check probes, served by GraphQL and by `/modules/healthcheck`;
 - the critical background tasks that are running;

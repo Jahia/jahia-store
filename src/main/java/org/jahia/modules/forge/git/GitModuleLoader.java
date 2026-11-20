@@ -34,14 +34,16 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Builds a {@link GitModule} from the store branch of a repository, as docs/git-backed-modules.md
- * states: the root {@code STORE.md}, then the {@code VERSION.md} and the files of the folder of
- * each version it lists.
+ * states: the root {@code STORE.md}, the files its description shows, then the {@code VERSION.md}
+ * and the files of the folder of each version it lists.
  */
 public final class GitModuleLoader {
 
     static final String STORE_MD = StoreManifestParser.FILE_NAME;
     static final String VERSION_MD = VersionManifest.FILE_NAME;
     static final String CHANGELOG_MD = "CHANGELOG.md";
+    /** The folder of the module under which the files of the description are served. */
+    static final String FILES_FOLDER = "files";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GitModuleLoader.class);
 
@@ -51,8 +53,8 @@ public final class GitModuleLoader {
     /**
      * @param reader       the repository
      * @param branch       the store branch, or null for the default branch of the repository
-     * @param filesBaseUrl the URL under which the files of a version are served, without a
-     *                     trailing slash, or null to leave the relative links of the notes as they are
+     * @param filesBaseUrl the URL under which the files of the module are served, without a
+     *                     trailing slash, or null to leave the relative links of the Markdown as they are
      * @throws IOException            when the remote cannot be read
      * @throws StoreManifestException when the repository fails the contract
      */
@@ -66,12 +68,20 @@ public final class GitModuleLoader {
         StoreManifest manifest = StoreManifestParser.parse(new String(content, StandardCharsets.UTF_8));
         Instant tipDate = reader.commitDate(ref);
 
+        // The description shows files of the repository, named relative to its root.
+        List<GitFile> files = new ArrayList<>();
+        for (String reference : Markdown.relativeReferences(manifest.getDescriptionMarkdown())) {
+            GitFile file = readDeclaredFile(reader, ref, reference, "description file");
+            if (file != null && GitModule.file(files, file.getName()) == null) {
+                files.add(file);
+            }
+        }
+        String descriptionHtml = Markdown.toHtml(manifest.getDescriptionMarkdown(),
+                filesBaseUrl == null ? null : filesBaseUrl + "/" + FILES_FOLDER + "/");
+
         List<GitModule.Version> versions = new ArrayList<>();
         for (StoreManifest.VersionLink link : manifest.getVersions()) {
-            GitModule.Version version = readVersion(reader, ref, manifest, link, tipDate, filesBaseUrl);
-            if (version != null) {
-                versions.add(version);
-            }
+            versions.add(readVersion(reader, ref, manifest, link, tipDate, filesBaseUrl));
         }
         versions.sort((a, b) -> VersionNumbers.newestFirst().compare(a.getNumber(), b.getNumber()));
 
@@ -83,10 +93,9 @@ public final class GitModuleLoader {
                 screenshots.add(screenshot);
             }
         }
-        return new GitModule(reader.getUrl(), branchName, manifest, versions, icon, screenshots);
+        return new GitModule(reader.getUrl(), branchName, manifest, descriptionHtml, files, versions, icon, screenshots);
     }
 
-    /** The version, or null when its {@code VERSION.md} withdraws it. */
     private static GitModule.Version readVersion(GitRepositoryReader reader, String ref, StoreManifest manifest,
                                                  StoreManifest.VersionLink link, Instant tipDate, String filesBaseUrl)
             throws IOException {
@@ -96,9 +105,6 @@ public final class GitModuleLoader {
             throw new StoreManifestException("The version " + link.getNumber() + " links to " + folder + ", which holds no " + VERSION_MD);
         }
         VersionManifest version = VersionManifest.parse(link.getNumber(), new String(content, StandardCharsets.UTF_8));
-        if (!version.isAvailable()) {
-            return null;
-        }
         String notes = version.getNotesMarkdown();
         if (StringUtils.isBlank(notes)) {
             byte[] changelog = reader.readFile(ref, folder + "/" + CHANGELOG_MD);
@@ -113,7 +119,7 @@ public final class GitModuleLoader {
                 files.add(new GitFile(name, reader.readFile(ref, folder + "/" + name)));
             }
         }
-        return new GitModule.Version(link.getNumber(), folder, version.getArtifactUrl(), notesHtml,
+        return new GitModule.Version(link.getNumber(), folder, version.getArtifactUrl(), version.isDisabled(), notesHtml,
                 StringUtils.defaultIfBlank(version.getRequiredVersion(), manifest.getRequiredVersion()),
                 version.getDependencies().isEmpty() ? manifest.getDependencies() : version.getDependencies(),
                 version.getDate() == null ? tipDate : version.getDate(), files);
@@ -121,11 +127,11 @@ public final class GitModuleLoader {
 
     /** A file that {@code STORE.md} names, or null, with a warning, when the repository lacks it. */
     private static GitFile readDeclaredFile(GitRepositoryReader reader, String ref, String path, String what) throws IOException {
-        byte[] bytes = reader.readFile(ref, path);
+        byte[] bytes = reader.readFile(ref, StringUtils.removeStart(path, "./"));
         if (bytes == null) {
             LOGGER.warn("The repository {} declares the {} {} and does not hold it", reader.getUrl(), what, path);
             return null;
         }
-        return new GitFile(StringUtils.substringAfterLast("/" + path, "/"), bytes);
+        return new GitFile(Markdown.baseName(path), bytes);
     }
 }

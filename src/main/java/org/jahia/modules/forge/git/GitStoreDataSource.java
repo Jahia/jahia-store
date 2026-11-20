@@ -58,8 +58,9 @@ import org.slf4j.LoggerFactory;
 
 /**
  * A read-only external data source that serves one git-backed module as the node tree that
- * docs/git-backed-modules.md maps: the module at the root, one version per available version
- * with its files, the icon folder and the screenshots list. The repository is read once, on the
+ * docs/git-backed-modules.md maps: the module at the root, one version per listed version with
+ * its files, the icon folder, the screenshots list and the files of the description. The
+ * repository is read once, on the
  * first request, and that reading is served until {@link #refresh()} replaces it.
  */
 public class GitStoreDataSource implements ExternalDataSource, ExternalDataSource.Initializable,
@@ -71,6 +72,7 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
     static final String TYPE_SCREENSHOTS = "jnt:forgeScreenshotsList";
     static final String NODE_ICON = "icon";
     static final String NODE_SCREENSHOTS = "screenshots";
+    static final String NODE_FILES = GitModuleLoader.FILES_FOLDER;
     static final String STATUS_COMMUNITY = "community";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GitStoreDataSource.class);
@@ -242,6 +244,7 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
         if (ROOT.equals(path)) {
             children.add(folder(NODE_ICON, Constants.JAHIANT_FOLDER));
             children.add(folder(NODE_SCREENSHOTS, TYPE_SCREENSHOTS));
+            children.add(folder(NODE_FILES, Constants.JAHIANT_FOLDER));
             for (GitModule.Version version : module.getVersions()) {
                 children.add(versionData(module, version));
             }
@@ -276,6 +279,9 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
             if (NODE_SCREENSHOTS.equals(segments[0])) {
                 return folder(NODE_SCREENSHOTS, TYPE_SCREENSHOTS);
             }
+            if (NODE_FILES.equals(segments[0])) {
+                return folder(NODE_FILES, Constants.JAHIANT_FOLDER);
+            }
             GitModule.Version version = module.version(segments[0]);
             return version == null ? null : versionData(module, version);
         }
@@ -299,6 +305,9 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
         }
         if (NODE_SCREENSHOTS.equals(folder)) {
             return module.getScreenshots();
+        }
+        if (NODE_FILES.equals(folder)) {
+            return module.getFiles();
         }
         GitModule.Version version = module.version(folder);
         return version == null ? Collections.emptyList() : version.getFiles();
@@ -324,14 +333,20 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
         properties.put("codeRepository", single(module.getRepositoryUrl()));
         putIfPresent(properties, "authorURL", manifest.getAuthorUrl());
         putIfPresent(properties, "authorEmail", manifest.getAuthorEmail());
-        Instant lastModified = module.getVersions().isEmpty() ? module.getReadAt() : module.getVersions().get(0).getDate();
+        Instant lastModified = module.getReadAt();
+        for (GitModule.Version version : module.getVersions()) {
+            if (!version.isDisabled()) {
+                lastModified = version.getDate();
+                break;
+            }
+        }
         properties.put(Constants.JCR_LASTMODIFIED, single(iso(lastModified)));
         properties.put(Constants.JCR_CREATED, single(iso(oldestDate(module))));
         putCreator(properties);
 
         Map<String, String[]> translated = new HashMap<>();
         translated.put(Constants.JCR_TITLE, single(manifest.getTitle()));
-        translated.put("description", single(manifest.getDescriptionHtml()));
+        translated.put("description", single(module.getDescriptionHtml()));
         putIfPresent(translated, "license", manifest.getLicense());
 
         ExternalData data = new ExternalData(ROOT, ROOT, TYPE_MODULE, properties);
@@ -344,7 +359,9 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
         Map<String, String[]> properties = new HashMap<>();
         properties.put("versionNumber", single(version.getNumber()));
         properties.put("url", single(version.getArtifactUrl()));
-        properties.put("published", TRUE);
+        // A disabled version is served unpublished: the storefront shows it to the editors of the
+        // module only, and the catalogue JSON leaves it out, as it does with a local draft.
+        properties.put("published", version.isDisabled() ? FALSE : TRUE);
         putIfPresent(properties, "changeLog", version.getNotesHtml());
         if (!version.getDependencies().isEmpty()) {
             properties.put("references", version.getDependencies().toArray(new String[0]));

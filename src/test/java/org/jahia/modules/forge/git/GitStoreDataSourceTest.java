@@ -73,7 +73,7 @@ class GitStoreDataSourceTest {
             + "dependencies:\n"
             + "  - default\n"
             + "---\n"
-            + "A **sample** module.\n"
+            + "A **sample** module. ![Overview](store/overview.svg)\n"
             + "\n"
             + "## Versions\n"
             + "\n"
@@ -81,12 +81,12 @@ class GitStoreDataSourceTest {
             + "- [1.0.0](store/1.0.0)\n"
             + "- [0.9.0](store/0.9.0)\n";
 
-    private static String version(String artifact, String date, String requiredVersion, boolean available, String notes) {
+    private static String version(String artifact, String date, String requiredVersion, boolean disabled, String notes) {
         return "---\n"
                 + "artifact: " + artifact + "\n"
                 + (date == null ? "" : "date: " + date + "\n")
                 + (requiredVersion == null ? "" : "requiredVersion: " + requiredVersion + "\n")
-                + (available ? "" : "available: false\n")
+                + (disabled ? "disabled: true\n" : "")
                 + "---\n"
                 + notes;
     }
@@ -102,12 +102,13 @@ class GitStoreDataSourceTest {
             write(work, "STORE.md", STORE_MD);
             Files.write(work.resolve("store/icon.png"), new byte[]{(byte) 0x89, 'P', 'N', 'G'});
             Files.write(work.resolve("store/shot.png"), new byte[]{(byte) 0x89, 'P', 'N', 'G', 1});
-            write(work, "store/1.0.0/VERSION.md", version("https://example.com/old/1.0.0.jar", "2025-01-02", null, true, ""));
+            write(work, "store/overview.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"/>");
+            write(work, "store/1.0.0/VERSION.md", version("https://example.com/old/1.0.0.jar", "2025-01-02", null, false, ""));
             write(work, "store/1.0.0/CHANGELOG.md", "- first\n");
-            write(work, "store/1.1.0/VERSION.md", version("https://example.com/new/{version}.jar", "2026-03-04", "8.2.1.0", true,
+            write(work, "store/1.1.0/VERSION.md", version("https://example.com/new/{version}.jar", "2026-03-04", "8.2.1.0", false,
                     "- second ![shot](shot-1.1.0.png)\n"));
             Files.write(work.resolve("store/1.1.0/shot-1.1.0.png"), new byte[]{(byte) 0x89, 'P', 'N', 'G', 2});
-            write(work, "store/0.9.0/VERSION.md", version("https://example.com/old/0.9.0.jar", "2024-01-02", null, false, "- withdrawn\n"));
+            write(work, "store/0.9.0/VERSION.md", version("https://example.com/old/0.9.0.jar", "2024-01-02", null, true, "- disabled\n"));
             git.add().addFilepattern(".").call();
             git.commit().setSign(false).setMessage("store data").setAuthor("t", "t@example.com").setCommitter("t", "t@example.com").call();
         }
@@ -134,16 +135,28 @@ class GitStoreDataSourceTest {
         assertThat(root.getProperties().get("published")).containsExactly("true");
         assertThat(root.getProperties().get("codeRepository")).containsExactly(url);
         assertThat(root.getI18nProperties()).containsKeys("en", "fr");
-        assertThat(root.getI18nProperties().get("fr").get("description")[0]).contains("<strong>sample</strong>").doesNotContain("1.1.0");
+        assertThat(root.getI18nProperties().get("fr").get("description")[0]).contains("<strong>sample</strong>").doesNotContain("1.1.0")
+                .contains("src=\"/files/live/sites/store/contents/modules-repository/sample/files/overview.svg\"");
         assertThat(root.getI18nProperties().get("en").get("license")).containsExactly("MIT");
     }
 
     @Test
-    @DisplayName("the children are the icon folder, the screenshots list and the available versions, newest first")
+    @DisplayName("the children are the icon folder, the screenshots list, the files of the description and every version, newest first")
     void childrenAreVersionsAndFolders() throws Exception {
         List<String> children = dataSource().getChildren("/");
 
-        assertThat(children).containsExactly("icon", "screenshots", "1.1.0", "1.0.0");
+        assertThat(children).containsExactly("icon", "screenshots", "files", "1.1.0", "1.0.0", "0.9.0");
+    }
+
+    @Test
+    @DisplayName("a disabled version is served unpublished, and a file the description shows is served under files")
+    void disabledVersionAndDescriptionFiles() throws Exception {
+        GitStoreDataSource ds = dataSource();
+
+        assertThat(ds.getItemByPath("/0.9.0").getProperties().get("published")).containsExactly("false");
+        assertThat(ds.getItemByPath("/1.0.0").getProperties().get("published")).containsExactly("true");
+        assertThat(ds.getChildren("/files")).containsExactly("overview.svg");
+        assertThat(ds.getItemByPath("/files/overview.svg/jcr:content").getProperties().get("jcr:mimeType")).containsExactly("image/svg+xml");
     }
 
     @Test
@@ -194,11 +207,10 @@ class GitStoreDataSourceTest {
     }
 
     @Test
-    @DisplayName("a withdrawn version and an unknown path do not exist")
+    @DisplayName("an unknown path does not exist")
     void unknownPath() throws Exception {
         GitStoreDataSource ds = dataSource();
 
-        assertThat(ds.itemExists("/0.9.0")).isFalse();
         assertThat(ds.itemExists("/9.9.9")).isFalse();
         assertThatThrownBy(() -> ds.getItemByPath("/nope")).isInstanceOf(PathNotFoundException.class);
     }
@@ -210,27 +222,27 @@ class GitStoreDataSourceTest {
         Files.createDirectories(repo.resolve("store/1.0.0"));
         try (Git git = Git.init().setDirectory(repo.toFile()).setInitialBranch("main").call()) {
             write(repo, "STORE.md", STORE_MD.replace("- [1.1.0](store/1.1.0)\n", "").replace("- [0.9.0](store/0.9.0)\n", ""));
-            write(repo, "store/1.0.0/VERSION.md", version("https://example.com/1.0.0.jar", null, null, true, ""));
+            write(repo, "store/1.0.0/VERSION.md", version("https://example.com/1.0.0.jar", null, null, false, ""));
             git.add().addFilepattern(".").call();
             git.commit().setSign(false).setMessage("1.0.0").setAuthor("t", "t@example.com").setCommitter("t", "t@example.com").call();
             GitStoreDataSource ds = new GitStoreDataSource(new GitRepositoryReader(tmp.resolve("cache2").toFile(), repo.toUri().toString()),
                     null, Collections.singleton("en"), "/x", null, TYPES);
-            assertThat(ds.getChildren("/")).containsExactly("icon", "screenshots", "1.0.0");
+            assertThat(ds.getChildren("/")).containsExactly("icon", "screenshots", "files", "1.0.0");
 
             Files.createDirectories(repo.resolve("store/1.1.0"));
             write(repo, "STORE.md", STORE_MD.replace("- [0.9.0](store/0.9.0)\n", ""));
-            write(repo, "store/1.1.0/VERSION.md", version("https://example.com/1.1.0.jar", null, null, true, ""));
+            write(repo, "store/1.1.0/VERSION.md", version("https://example.com/1.1.0.jar", null, null, false, ""));
             git.add().addFilepattern(".").call();
             git.commit().setSign(false).setMessage("1.1.0").setAuthor("t", "t@example.com").setCommitter("t", "t@example.com").call();
-            assertThat(ds.getChildren("/")).as("nothing refreshes on its own").containsExactly("icon", "screenshots", "1.0.0");
+            assertThat(ds.getChildren("/")).as("nothing refreshes on its own").containsExactly("icon", "screenshots", "files", "1.0.0");
             ds.refresh();
-            assertThat(ds.getChildren("/")).containsExactly("icon", "screenshots", "1.1.0", "1.0.0");
+            assertThat(ds.getChildren("/")).containsExactly("icon", "screenshots", "files", "1.1.0", "1.0.0");
 
             write(repo, "STORE.md", "no front matter\n");
             git.add().addFilepattern(".").call();
             git.commit().setSign(false).setMessage("broken").setAuthor("t", "t@example.com").setCommitter("t", "t@example.com").call();
             assertThatThrownBy(ds::refresh).isInstanceOf(StoreManifestException.class).hasMessageContaining("front matter");
-            assertThat(ds.getChildren("/")).as("the previous reading stays").containsExactly("icon", "screenshots", "1.1.0", "1.0.0");
+            assertThat(ds.getChildren("/")).as("the previous reading stays").containsExactly("icon", "screenshots", "files", "1.1.0", "1.0.0");
         }
     }
 

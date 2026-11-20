@@ -28,28 +28,30 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * What the store knows of a git-backed module at one point in time: the manifest, the available
- * versions with their files, the icon and the screenshots. Immutable, so a read never sees a
- * half refresh.
+ * What the store knows of a git-backed module at one point in time: the manifest, the description
+ * rendered with the files it shows, the versions with their files, the icon and the screenshots.
+ * Immutable, so a read never sees a half refresh.
  */
 public final class GitModule {
 
-    /** One available version: its manifest, its release notes rendered, and the files of its folder. */
+    /** One version: its manifest, its release notes rendered, and the files of its folder. */
     public static final class Version {
         private final String number;
         private final String folder;
         private final String artifactUrl;
+        private final boolean disabled;
         private final String notesHtml;
         private final String requiredVersion;
         private final List<String> dependencies;
         private final Instant date;
         private final List<GitFile> files;
 
-        Version(String number, String folder, String artifactUrl, String notesHtml, String requiredVersion,
+        Version(String number, String folder, String artifactUrl, boolean disabled, String notesHtml, String requiredVersion,
                 List<String> dependencies, Instant date, List<GitFile> files) {
             this.number = number;
             this.folder = folder;
             this.artifactUrl = artifactUrl;
+            this.disabled = disabled;
             this.notesHtml = notesHtml;
             this.requiredVersion = requiredVersion;
             this.dependencies = dependencies == null ? Collections.emptyList() : Collections.unmodifiableList(dependencies);
@@ -68,6 +70,11 @@ public final class GitModule {
 
         public String getArtifactUrl() {
             return artifactUrl;
+        }
+
+        /** True when the version file disables the version: served unpublished, for the editors of the module only. */
+        public boolean isDisabled() {
+            return disabled;
         }
 
         /** The release notes as HTML, or null when the version has none. */
@@ -100,16 +107,20 @@ public final class GitModule {
     private final String repositoryUrl;
     private final String branch;
     private final StoreManifest manifest;
+    private final String descriptionHtml;
+    private final List<GitFile> files;
     private final List<Version> versions;
     private final GitFile icon;
     private final List<GitFile> screenshots;
     private final Instant readAt;
 
-    GitModule(String repositoryUrl, String branch, StoreManifest manifest, List<Version> versions,
-              GitFile icon, List<GitFile> screenshots) {
+    GitModule(String repositoryUrl, String branch, StoreManifest manifest, String descriptionHtml, List<GitFile> files,
+              List<Version> versions, GitFile icon, List<GitFile> screenshots) {
         this.repositoryUrl = repositoryUrl;
         this.branch = branch;
         this.manifest = manifest;
+        this.descriptionHtml = descriptionHtml;
+        this.files = files == null ? Collections.emptyList() : Collections.unmodifiableList(files);
         this.versions = Collections.unmodifiableList(versions);
         this.icon = icon;
         this.screenshots = screenshots == null ? Collections.emptyList() : Collections.unmodifiableList(screenshots);
@@ -138,7 +149,17 @@ public final class GitModule {
         return manifest;
     }
 
-    /** The available versions, newest first. */
+    /** The description rendered to HTML, its relative images and links pointing at {@link #getFiles()}. */
+    public String getDescriptionHtml() {
+        return descriptionHtml;
+    }
+
+    /** The files the description shows, served under the {@code files} folder of the module. */
+    public List<GitFile> getFiles() {
+        return files;
+    }
+
+    /** Every version of the manifest, the disabled ones included, newest first. */
     public List<Version> getVersions() {
         return versions;
     }

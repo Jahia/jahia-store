@@ -23,7 +23,11 @@
  */
 package org.jahia.modules.forge.git;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import org.apache.commons.lang.StringUtils;
+import org.commonmark.node.AbstractVisitor;
 import org.commonmark.node.Image;
 import org.commonmark.node.Link;
 import org.commonmark.node.Node;
@@ -33,7 +37,9 @@ import org.commonmark.renderer.html.HtmlRenderer;
 
 /**
  * Renders the Markdown of a repository to the HTML that a richtext property holds. Raw HTML in
- * the Markdown is escaped: the text comes from a contributor and the storefront renders it.
+ * the Markdown is escaped: the text comes from a contributor and the storefront renders it. A
+ * relative image or link names a file of the repository, which the store serves beside the
+ * node under its base name.
  */
 final class Markdown {
 
@@ -48,8 +54,9 @@ final class Markdown {
     }
 
     /**
-     * @param baseUrl the URL a relative link or image is resolved against, with its trailing
-     *                slash, or null to leave relative links as they are
+     * @param baseUrl the URL under which the files are served, with its trailing slash, which a
+     *                relative image or link is resolved against by its base name; or null to
+     *                leave relative links as they are
      */
     static String toHtml(String markdown, String baseUrl) {
         if (markdown == null || markdown.trim().isEmpty()) {
@@ -61,7 +68,46 @@ final class Markdown {
         return renderer.render(document).trim();
     }
 
-    /** Prefixes a relative {@code href} or {@code src} with the base URL. An absolute or anchor link stays. */
+    /** The relative images and links of the Markdown, as written, in the order of the text, without duplicates. */
+    static List<String> relativeReferences(String markdown) {
+        List<String> references = new ArrayList<>();
+        if (markdown == null || markdown.trim().isEmpty()) {
+            return references;
+        }
+        PARSER.parse(markdown).accept(new AbstractVisitor() {
+            @Override
+            public void visit(Image image) {
+                add(image.getDestination());
+                super.visit(image);
+            }
+
+            @Override
+            public void visit(Link link) {
+                add(link.getDestination());
+                super.visit(link);
+            }
+
+            private void add(String destination) {
+                if (destination != null && isRelative(destination) && !references.contains(destination)) {
+                    references.add(destination);
+                }
+            }
+        });
+        return references;
+    }
+
+    /** A path of the repository: not absolute, not an anchor, not a URL with a scheme, not climbing out. */
+    static boolean isRelative(String url) {
+        return !url.isEmpty() && !url.startsWith("/") && !url.startsWith("#") && !url.contains(":")
+                && !url.startsWith("..") && !url.contains("/../");
+    }
+
+    /** The base name of a relative reference, which is the name the store serves the file under. */
+    static String baseName(String reference) {
+        return StringUtils.substringAfterLast("/" + StringUtils.removeEnd(reference, "/"), "/");
+    }
+
+    /** Points a relative {@code href} or {@code src} at the served file. An absolute or anchor link stays. */
     private static final class RelativeLinks implements AttributeProvider {
         private final String baseUrl;
 
@@ -77,12 +123,8 @@ final class Markdown {
             }
             String value = attributes.get(attribute);
             if (value != null && isRelative(value)) {
-                attributes.put(attribute, baseUrl + (value.startsWith("./") ? value.substring(2) : value));
+                attributes.put(attribute, baseUrl + baseName(value));
             }
-        }
-
-        private static boolean isRelative(String url) {
-            return !url.isEmpty() && !url.startsWith("/") && !url.startsWith("#") && !url.contains(":") && !url.startsWith("..");
         }
     }
 }
