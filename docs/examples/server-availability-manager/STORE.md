@@ -54,3 +54,8 @@ documents the probes and their configuration.
 - [1.1.0](store/1.1.0)
 - [1.0.1](store/1.0.1)
 - [1.0.0](store/1.0.0)
+
+## Tabs
+
+- [Installation](store/installation.md)
+- [License](store/license.md)

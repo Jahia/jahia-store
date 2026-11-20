@@ -79,7 +79,12 @@ class GitStoreDataSourceTest {
             + "\n"
             + "- [1.1.0](store/1.1.0)\n"
             + "- [1.0.0](store/1.0.0)\n"
-            + "- [0.9.0](store/0.9.0)\n";
+            + "- [0.9.0](store/0.9.0)\n"
+            + "\n"
+            + "## Tabs\n"
+            + "\n"
+            + "- [How to install](store/install.md)\n"
+            + "- [License](store/license.md)\n";
 
     private static String version(String artifact, String date, String requiredVersion, boolean disabled, String notes) {
         return "---\n"
@@ -103,6 +108,9 @@ class GitStoreDataSourceTest {
             Files.write(work.resolve("store/icon.png"), new byte[]{(byte) 0x89, 'P', 'N', 'G'});
             Files.write(work.resolve("store/shot.png"), new byte[]{(byte) 0x89, 'P', 'N', 'G', 1});
             write(work, "store/overview.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"/>");
+            write(work, "store/install.md", "Drop the **jar** in. ![Steps](install.png)\n");
+            Files.write(work.resolve("store/install.png"), new byte[]{(byte) 0x89, 'P', 'N', 'G', 3});
+            write(work, "store/license.md", "MIT, in full.\n");
             write(work, "store/1.0.0/VERSION.md", version("https://example.com/old/1.0.0.jar", "2025-01-02", null, false, ""));
             write(work, "store/1.0.0/CHANGELOG.md", "- first\n");
             write(work, "store/1.1.0/VERSION.md", version("https://example.com/new/{version}.jar", "2026-03-04", "8.2.1.0", false,
@@ -137,15 +145,30 @@ class GitStoreDataSourceTest {
         assertThat(root.getI18nProperties()).containsKeys("en", "fr");
         assertThat(root.getI18nProperties().get("fr").get("description")[0]).contains("<strong>sample</strong>").doesNotContain("1.1.0")
                 .contains("src=\"/files/live/sites/store/contents/modules-repository/sample/files/overview.svg\"");
-        assertThat(root.getI18nProperties().get("en").get("license")).containsExactly("MIT");
+        assertThat(root.getI18nProperties().get("en")).as("the License tab takes the place of the license field").doesNotContainKey("license");
     }
 
     @Test
-    @DisplayName("the children are the icon folder, the screenshots list, the files of the description and every version, newest first")
+    @DisplayName("the children are the icon folder, the screenshots list, the files, the tabs and every version, newest first")
     void childrenAreVersionsAndFolders() throws Exception {
         List<String> children = dataSource().getChildren("/");
 
-        assertThat(children).containsExactly("icon", "screenshots", "files", "1.1.0", "1.0.0", "0.9.0");
+        assertThat(children).containsExactly("icon", "screenshots", "files", "tabs", "1.1.0", "1.0.0", "0.9.0");
+    }
+
+    @Test
+    @DisplayName("a tab is served under tabs with its title and its content, and the files it shows under files")
+    void tabs() throws Exception {
+        GitStoreDataSource ds = dataSource();
+
+        assertThat(ds.getChildren("/tabs")).containsExactly("how-to-install", "license");
+        ExternalData tab = ds.getItemByPath("/tabs/how-to-install");
+        assertThat(tab.getType()).isEqualTo("jnt:forgeTab");
+        assertThat(tab.getProperties().get("jcr:title")).containsExactly("How to install");
+        assertThat(tab.getProperties().get("content")[0]).contains("<strong>jar</strong>")
+                .contains("src=\"/files/live/sites/store/contents/modules-repository/sample/files/install.png\"");
+        assertThat(ds.getChildren("/files")).containsExactly("overview.svg", "install.png");
+        assertThat(ds.itemExists("/tabs/nope")).isFalse();
     }
 
     @Test
@@ -155,7 +178,7 @@ class GitStoreDataSourceTest {
 
         assertThat(ds.getItemByPath("/0.9.0").getProperties().get("published")).containsExactly("false");
         assertThat(ds.getItemByPath("/1.0.0").getProperties().get("published")).containsExactly("true");
-        assertThat(ds.getChildren("/files")).containsExactly("overview.svg");
+        assertThat(ds.getChildren("/files")).contains("overview.svg");
         assertThat(ds.getItemByPath("/files/overview.svg/jcr:content").getProperties().get("jcr:mimeType")).containsExactly("image/svg+xml");
     }
 
@@ -225,28 +248,28 @@ class GitStoreDataSourceTest {
         Path repo = tmp.resolve("refresh");
         Files.createDirectories(repo.resolve("store/1.0.0"));
         try (Git git = Git.init().setDirectory(repo.toFile()).setInitialBranch("main").call()) {
-            write(repo, "STORE.md", STORE_MD.replace("- [1.1.0](store/1.1.0)\n", "").replace("- [0.9.0](store/0.9.0)\n", ""));
+            write(repo, "STORE.md", withoutTabs(STORE_MD).replace("- [1.1.0](store/1.1.0)\n", "").replace("- [0.9.0](store/0.9.0)\n", ""));
             write(repo, "store/1.0.0/VERSION.md", version("https://example.com/1.0.0.jar", null, null, false, ""));
             git.add().addFilepattern(".").call();
             git.commit().setSign(false).setMessage("1.0.0").setAuthor("t", "t@example.com").setCommitter("t", "t@example.com").call();
             GitStoreDataSource ds = new GitStoreDataSource(new GitRepositoryReader(tmp.resolve("cache2").toFile(), repo.toUri().toString()),
                     null, Collections.singleton("en"), "/x", null, TYPES);
-            assertThat(ds.getChildren("/")).containsExactly("icon", "screenshots", "files", "1.0.0");
+            assertThat(ds.getChildren("/")).containsExactly("icon", "screenshots", "files", "tabs", "1.0.0");
 
             Files.createDirectories(repo.resolve("store/1.1.0"));
-            write(repo, "STORE.md", STORE_MD.replace("- [0.9.0](store/0.9.0)\n", ""));
+            write(repo, "STORE.md", withoutTabs(STORE_MD).replace("- [0.9.0](store/0.9.0)\n", ""));
             write(repo, "store/1.1.0/VERSION.md", version("https://example.com/1.1.0.jar", null, null, false, ""));
             git.add().addFilepattern(".").call();
             git.commit().setSign(false).setMessage("1.1.0").setAuthor("t", "t@example.com").setCommitter("t", "t@example.com").call();
-            assertThat(ds.getChildren("/")).as("nothing refreshes on its own").containsExactly("icon", "screenshots", "files", "1.0.0");
+            assertThat(ds.getChildren("/")).as("nothing refreshes on its own").containsExactly("icon", "screenshots", "files", "tabs", "1.0.0");
             ds.refresh();
-            assertThat(ds.getChildren("/")).containsExactly("icon", "screenshots", "files", "1.1.0", "1.0.0");
+            assertThat(ds.getChildren("/")).containsExactly("icon", "screenshots", "files", "tabs", "1.1.0", "1.0.0");
 
             write(repo, "STORE.md", "no front matter\n");
             git.add().addFilepattern(".").call();
             git.commit().setSign(false).setMessage("broken").setAuthor("t", "t@example.com").setCommitter("t", "t@example.com").call();
             assertThatThrownBy(ds::refresh).isInstanceOf(StoreManifestException.class).hasMessageContaining("front matter");
-            assertThat(ds.getChildren("/")).as("the previous reading stays").containsExactly("icon", "screenshots", "files", "1.1.0", "1.0.0");
+            assertThat(ds.getChildren("/")).as("the previous reading stays").containsExactly("icon", "screenshots", "files", "tabs", "1.1.0", "1.0.0");
         }
     }
 
@@ -267,12 +290,29 @@ class GitStoreDataSourceTest {
         Path dangling = tmp.resolve("dangling");
         Files.createDirectories(dangling);
         try (Git git = Git.init().setDirectory(dangling.toFile()).setInitialBranch("main").call()) {
-            write(dangling, "STORE.md", STORE_MD);
+            write(dangling, "STORE.md", withoutTabs(STORE_MD));
             git.add().addFilepattern(".").call();
             git.commit().setSign(false).setMessage("init").setAuthor("t", "t@example.com").setCommitter("t", "t@example.com").call();
         }
         GitStoreDataSource noVersionFile = new GitStoreDataSource(new GitRepositoryReader(cacheDir, dangling.toUri().toString()), null,
                 Collections.singleton("en"), "/x", null, TYPES);
         assertThatThrownBy(noVersionFile::isAvailable).hasMessageContaining("1.1.0").hasMessageContaining("VERSION.md");
+
+        Path noTabFile = tmp.resolve("notab");
+        Files.createDirectories(noTabFile.resolve("store/1.0.0"));
+        try (Git git = Git.init().setDirectory(noTabFile.toFile()).setInitialBranch("main").call()) {
+            write(noTabFile, "STORE.md", STORE_MD.replace("- [1.1.0](store/1.1.0)\n", "").replace("- [0.9.0](store/0.9.0)\n", ""));
+            write(noTabFile, "store/1.0.0/VERSION.md", version("https://example.com/1.0.0.jar", null, null, false, ""));
+            git.add().addFilepattern(".").call();
+            git.commit().setSign(false).setMessage("init").setAuthor("t", "t@example.com").setCommitter("t", "t@example.com").call();
+        }
+        GitStoreDataSource missingTab = new GitStoreDataSource(new GitRepositoryReader(cacheDir, noTabFile.toUri().toString()), null,
+                Collections.singleton("en"), "/x", null, TYPES);
+        assertThatThrownBy(missingTab::isAvailable).hasMessageContaining("How to install").hasMessageContaining("store/install.md");
+    }
+
+    /** The manifest without its Tabs section, for a repository that holds no tab file. */
+    private static String withoutTabs(String storeMd) {
+        return storeMd.substring(0, storeMd.indexOf("## Tabs"));
     }
 }

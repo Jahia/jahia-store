@@ -68,6 +68,9 @@
  + video (jnt:videostreaming) = jnt:videostreaming
  // The files the description shows, which a git-backed module reads from its repository.
  + files (jnt:folder)
+ // The tabs of the page of the module beyond the built-in ones, which a git-backed module reads
+ // from the Markdown files its STORE.md lists (docs/git-backed-modules.md).
+ + tabs (jnt:forgeTabs)
  + * (jnt:forgeModuleVersion)
 
 [jnt:forgePackage] > jnt:content, mix:title, jmix:editorialContent, jmix:tagged, jmix:categorized, jmix:forge, jmix:forgeElement, jmix:reviews, jmix:rating
@@ -128,6 +131,13 @@
  + * (jnt:file) = jnt:file
 
 [jnt:forgeModuleScreenshotsList] > jnt:forgeScreenshotsList
+
+// One tab of the page of a module: its title and its content, in the order of the list.
+[jnt:forgeTab] > jnt:content, mix:title
+ - content (string, richtext) indexed=no
+
+[jnt:forgeTabs] > jnt:content, jmix:list orderable
+ + * (jnt:forgeTab) = jnt:forgeTab
 
 [jmix:forgeSettings] mixin
    extends = jnt:virtualsite

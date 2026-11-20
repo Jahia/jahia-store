@@ -70,15 +70,19 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
     static final String TYPE_MODULE = "jnt:forgeModule";
     static final String TYPE_VERSION = "jnt:forgeModuleVersion";
     static final String TYPE_SCREENSHOTS = "jnt:forgeScreenshotsList";
+    static final String TYPE_TABS = "jnt:forgeTabs";
+    static final String TYPE_TAB = "jnt:forgeTab";
     static final String NODE_ICON = "icon";
     static final String NODE_SCREENSHOTS = "screenshots";
     static final String NODE_FILES = GitModuleLoader.FILES_FOLDER;
+    static final String NODE_TABS = "tabs";
     static final String STATUS_COMMUNITY = "community";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GitStoreDataSource.class);
     private static final String ROOT = "/";
     private static final Set<String> SUPPORTED_TYPES = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-            TYPE_MODULE, TYPE_VERSION, TYPE_SCREENSHOTS, Constants.JAHIANT_FOLDER, Constants.JAHIANT_FILE, Constants.JAHIANT_RESOURCE)));
+            TYPE_MODULE, TYPE_VERSION, TYPE_SCREENSHOTS, TYPE_TABS, TYPE_TAB,
+            Constants.JAHIANT_FOLDER, Constants.JAHIANT_FILE, Constants.JAHIANT_RESOURCE)));
     private static final String[] TRUE = {"true"};
     private static final String[] FALSE = {"false"};
     /** How long a failed first reading holds before a request tries the remote again. */
@@ -245,13 +249,18 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
             children.add(folder(NODE_ICON, Constants.JAHIANT_FOLDER));
             children.add(folder(NODE_SCREENSHOTS, TYPE_SCREENSHOTS));
             children.add(folder(NODE_FILES, Constants.JAHIANT_FOLDER));
+            children.add(folder(NODE_TABS, TYPE_TABS));
             for (GitModule.Version version : module.getVersions()) {
                 children.add(versionData(module, version));
             }
             return children;
         }
         String[] segments = path.substring(1).split("/");
-        if (segments.length == 1) {
+        if (segments.length == 1 && NODE_TABS.equals(segments[0])) {
+            for (GitModule.Tab tab : module.getTabs()) {
+                children.add(tabData(module, tab));
+            }
+        } else if (segments.length == 1) {
             // A folder: its files.
             String folderPath = "/" + segments[0];
             for (GitFile file : filesOf(module, segments[0])) {
@@ -282,8 +291,15 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
             if (NODE_FILES.equals(segments[0])) {
                 return folder(NODE_FILES, Constants.JAHIANT_FOLDER);
             }
+            if (NODE_TABS.equals(segments[0])) {
+                return folder(NODE_TABS, TYPE_TABS);
+            }
             GitModule.Version version = module.version(segments[0]);
             return version == null ? null : versionData(module, version);
+        }
+        if (NODE_TABS.equals(segments[0])) {
+            GitModule.Tab tab = module.tab(segments[1]);
+            return tab == null || segments.length != 2 ? null : tabData(module, tab);
         }
         GitFile file = fileOf(module, segments[0], segments[1]);
         if (file == null) {
@@ -347,7 +363,10 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
         Map<String, String[]> translated = new HashMap<>();
         translated.put(Constants.JCR_TITLE, single(manifest.getTitle()));
         translated.put("description", single(module.getDescriptionHtml()));
-        putIfPresent(translated, "license", manifest.getLicense());
+        // A License tab of the repository takes the place of the license field on the page.
+        if (!module.hasTab("License")) {
+            putIfPresent(translated, "license", manifest.getLicense());
+        }
 
         ExternalData data = new ExternalData(ROOT, ROOT, TYPE_MODULE, properties);
         data.setI18nProperties(forEveryLanguage(translated));
@@ -375,6 +394,22 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
         properties.put(Constants.JCR_LASTMODIFIED, single(date));
         putCreator(properties);
         return new ExternalData(path, path, TYPE_VERSION, properties);
+    }
+
+    private ExternalData tabData(GitModule module, GitModule.Tab tab) {
+        String path = "/" + NODE_TABS + "/" + tab.getName();
+        Map<String, String[]> properties = new HashMap<>();
+        properties.put(Constants.JCR_TITLE, single(tab.getTitle()));
+        properties.put("content", single(tab.getContentHtml()));
+        String date = iso(module.getReadAt());
+        properties.put(Constants.JCR_CREATED, single(date));
+        properties.put(Constants.JCR_LASTMODIFIED, single(date));
+        putCreator(properties);
+        ExternalData data = new ExternalData(path, path, TYPE_TAB, properties);
+        Map<String, String[]> translated = new HashMap<>();
+        translated.put(Constants.JCR_TITLE, single(tab.getTitle()));
+        data.setI18nProperties(forEveryLanguage(translated));
+        return data;
     }
 
     private void putCreator(Map<String, String[]> properties) {

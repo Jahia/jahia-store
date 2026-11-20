@@ -125,23 +125,56 @@ public final class GitModule {
         }
     }
 
+    /** One tab of the page of the module: its title, its node name and its content rendered. */
+    public static final class Tab {
+        private final String title;
+        private final String name;
+        private final String contentHtml;
+
+        Tab(String title, String name, String contentHtml) {
+            this.title = title;
+            this.name = name;
+            this.contentHtml = contentHtml;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        /** The node name of the tab: the title in lowercase with every run of other characters as one dash. */
+        public String getName() {
+            return name;
+        }
+
+        public String getContentHtml() {
+            return contentHtml;
+        }
+
+        static String nameOf(String title) {
+            String name = title.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "");
+            return name.isEmpty() ? "tab" : name;
+        }
+    }
+
     private final String repositoryUrl;
     private final String branch;
     private final StoreManifest manifest;
     private final String descriptionHtml;
     private final List<GitFile> files;
+    private final List<Tab> tabs;
     private final List<Version> versions;
     private final GitFile icon;
     private final List<GitFile> screenshots;
     private final Instant readAt;
 
     GitModule(String repositoryUrl, String branch, StoreManifest manifest, String descriptionHtml, List<GitFile> files,
-              List<Version> versions, GitFile icon, List<GitFile> screenshots) {
+              List<Tab> tabs, List<Version> versions, GitFile icon, List<GitFile> screenshots) {
         this.repositoryUrl = repositoryUrl;
         this.branch = branch;
         this.manifest = manifest;
         this.descriptionHtml = descriptionHtml;
         this.files = files == null ? Collections.emptyList() : Collections.unmodifiableList(files);
+        this.tabs = tabs == null ? Collections.emptyList() : Collections.unmodifiableList(tabs);
         this.versions = Collections.unmodifiableList(versions);
         this.icon = icon;
         this.screenshots = screenshots == null ? Collections.emptyList() : Collections.unmodifiableList(screenshots);
@@ -178,6 +211,30 @@ public final class GitModule {
     /** The files the description shows, served under the {@code files} folder of the module. */
     public List<GitFile> getFiles() {
         return files;
+    }
+
+    /** The tabs of the {@code ## Tabs} section, in the order of the file. */
+    public List<Tab> getTabs() {
+        return tabs;
+    }
+
+    public Tab tab(String name) {
+        for (Tab tab : tabs) {
+            if (tab.getName().equals(name)) {
+                return tab;
+            }
+        }
+        return null;
+    }
+
+    /** True when a tab carries the title, whatever its case. */
+    public boolean hasTab(String title) {
+        for (Tab tab : tabs) {
+            if (tab.getTitle().equalsIgnoreCase(title)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Every version of the manifest, the disabled ones included, newest first. */

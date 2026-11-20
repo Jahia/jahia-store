@@ -56,7 +56,26 @@ class StoreManifestParserTest {
             + "\n"
             + "## Support\n"
             + "\n"
-            + "Ask on the forum.\n";
+            + "Ask on the forum.\n"
+            + "\n"
+            + "## Tabs\n"
+            + "\n"
+            + "- [Installation](store/installation.md)\n"
+            + "- [License](store/license.md)\n";
+
+    @Test
+    @DisplayName("the Tabs section lists the tabs with their Markdown files, and is not part of the description")
+    void tabsSection() {
+        StoreManifest manifest = StoreManifestParser.parse(VALID);
+
+        assertThat(manifest.getTabs()).extracting(StoreManifest.TabLink::getTitle).containsExactly("Installation", "License");
+        assertThat(manifest.getTabs()).extracting(StoreManifest.TabLink::getFile).containsExactly("store/installation.md", "store/license.md");
+        assertThat(manifest.getDescriptionHtml()).doesNotContain("Tabs").doesNotContain("installation.md");
+        assertThatThrownBy(() -> StoreManifestParser.parse(VALID.replace("(store/license.md)", "(store/license.txt)")))
+                .hasMessageContaining("Markdown file");
+        assertThatThrownBy(() -> StoreManifestParser.parse(VALID.replace("[License]", "[installation]")))
+                .hasMessageContaining("twice");
+    }
 
     @Test
     @DisplayName("parses the shared fields and renders the body to HTML")
@@ -100,7 +119,7 @@ class StoreManifestParserTest {
         assertThatThrownBy(() -> StoreManifestParser.parse(VALID.replace("[1.1.0]", "[latest]")))
                 .hasMessageContaining("Maven version");
         assertThatThrownBy(() -> StoreManifestParser.parse(VALID.replace("- [1.1.0](./store/1.1.0/)", "- 1.1.0 is old")))
-                .hasMessageContaining("not a version link");
+                .hasMessageContaining("not a link");
     }
 
     @Test

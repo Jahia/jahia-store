@@ -34,8 +34,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Builds a {@link GitModule} from the store branch of a repository, as docs/git-backed-modules.md
- * states: the root {@code STORE.md}, the files its description shows, then the {@code VERSION.md}
- * and the files of the folder of each version it lists.
+ * states: the root {@code STORE.md}, the files its description and its tabs show, then the
+ * {@code VERSION.md} and the files of the folder of each version it lists.
  */
 public final class GitModuleLoader {
 
@@ -68,16 +68,25 @@ public final class GitModuleLoader {
         StoreManifest manifest = StoreManifestParser.parse(new String(content, StandardCharsets.UTF_8));
         Instant tipDate = reader.commitDate(ref);
 
-        // The description shows files of the repository, named relative to its root.
+        // The description and the tabs show files of the repository, named relative to its root.
         List<GitFile> files = new ArrayList<>();
-        for (String reference : Markdown.relativeReferences(manifest.getDescriptionMarkdown())) {
-            GitFile file = readDeclaredFile(reader, ref, reference, "description file");
-            if (file != null && GitModule.file(files, file.getName()) == null) {
-                files.add(file);
+        String filesUrl = filesBaseUrl == null ? null : filesBaseUrl + "/" + FILES_FOLDER + "/";
+        readReferencedFiles(reader, ref, manifest.getDescriptionMarkdown(), "", files);
+        String descriptionHtml = Markdown.toHtml(manifest.getDescriptionMarkdown(), filesUrl);
+        List<GitModule.Tab> tabs = new ArrayList<>();
+        for (StoreManifest.TabLink link : manifest.getTabs()) {
+            byte[] tabContent = reader.readFile(ref, link.getFile());
+            if (tabContent == null) {
+                throw new StoreManifestException("The tab " + link.getTitle() + " links to " + link.getFile() + ", which the repository does not hold");
             }
+            String markdown = new String(tabContent, StandardCharsets.UTF_8);
+            readReferencedFiles(reader, ref, markdown, StringUtils.substringBeforeLast("/" + link.getFile(), "/").substring(1), files);
+            String tabName = GitModule.Tab.nameOf(link.getTitle());
+            if (tabs.stream().anyMatch(t -> t.getName().equals(tabName))) {
+                throw new StoreManifestException("The tabs " + link.getTitle() + " and another one share the node name " + tabName);
+            }
+            tabs.add(new GitModule.Tab(link.getTitle(), tabName, Markdown.toHtml(markdown, filesUrl)));
         }
-        String descriptionHtml = Markdown.toHtml(manifest.getDescriptionMarkdown(),
-                filesBaseUrl == null ? null : filesBaseUrl + "/" + FILES_FOLDER + "/");
 
         List<ReadVersion> read = new ArrayList<>();
         for (StoreManifest.VersionLink link : manifest.getVersions()) {
@@ -99,7 +108,27 @@ public final class GitModuleLoader {
                 screenshots.add(screenshot);
             }
         }
-        return new GitModule(reader.getUrl(), branchName, manifest, descriptionHtml, files, versions, icon, screenshots);
+        return new GitModule(reader.getUrl(), branchName, manifest, descriptionHtml, files, tabs, versions, icon, screenshots);
+    }
+
+    /**
+     * Read the files a Markdown text references, each once.
+     *
+     * @param baseDir the folder of the Markdown file inside the repository, which a relative
+     *                reference is resolved against; empty for the root
+     */
+    private static void readReferencedFiles(GitRepositoryReader reader, String ref, String markdown, String baseDir, List<GitFile> files)
+            throws IOException {
+        for (String reference : Markdown.relativeReferences(markdown)) {
+            if (GitModule.file(files, Markdown.baseName(reference)) != null) {
+                continue;
+            }
+            String path = (baseDir.isEmpty() ? "" : baseDir + "/") + StringUtils.removeStart(reference, "./");
+            GitFile file = readDeclaredFile(reader, ref, path, "referenced file");
+            if (file != null) {
+                files.add(file);
+            }
+        }
     }
 
     /** The folder of a version as read: its manifest, its notes rendered and its files. */

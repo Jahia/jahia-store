@@ -47,6 +47,11 @@ The description of the module, in Markdown.
 
 - [1.2.0](store/1.2.0)
 - [1.1.0](store/1.1.0)
+
+## Tabs
+
+- [Installation](store/installation.md)
+- [License](store/license.md)
 ```
 
 | Field | Mandatory | Meaning |
@@ -64,11 +69,19 @@ The description of the module, in Markdown.
 The `## Versions` section lists one version per list item: a link whose text is the version
 number and whose target is the folder of that version, relative to `STORE.md`. The section is
 not part of the description. A relative image or link in the description names a file of the
-repository, relative to its root, and the store serves that file beside the module. A version number holds letters, digits, `.`, `_` and `-`, as a
+repository, relative to its root, and the store serves that file beside the module.
+
+The `## Tabs` section lists the tabs of the page of the module beyond its overview, as many as
+the module wants: one link per tab, whose text is the title of the tab and whose target is the
+Markdown file of its content, relative to `STORE.md`. The page shows the tabs in the order of the
+list, after the overview. A tab titled `License` takes the place of the `license` field on the
+page. A relative image or link in a tab names a file of the repository, relative to the file of
+the tab, as a Markdown viewer resolves it. A version number holds letters, digits, `.`, `_` and `-`, as a
 Maven version does. A module with no `## Versions` section has no version yet.
 
-A repository that lacks `STORE.md` on the store branch, lacks a mandatory field, or names a
-version twice is refused at registration, and the error names the cause.
+A repository that lacks `STORE.md` on the store branch, lacks a mandatory field, names a version
+or a tab twice, or links a tab to a file it does not hold is refused at registration, and the
+error names the cause.
 
 ### The folder of a version
 
@@ -124,7 +137,9 @@ The data source serves one module per registration. The root of the provider is 
 | `/screenshots` | `jnt:forgeScreenshotsList` | Always present. |
 | `/screenshots/<file>` | `jnt:file` | One per file that the `screenshots` field names. |
 | `/files` | `jnt:folder` | Always present. |
-| `/files/<file>` | `jnt:file` | One per file the description shows, under its base name. |
+| `/files/<file>` | `jnt:file` | One per file the description or a tab shows, under its base name. |
+| `/tabs` | `jnt:forgeTabs` | Always present. |
+| `/tabs/<name>` | `jnt:forgeTab` | One per tab of the `## Tabs` section, named after its title in lowercase, with the title as `jcr:title` and the file rendered to HTML as `content`. |
 
 | Property of `jnt:forgeModule` | Source |
 |---|---|

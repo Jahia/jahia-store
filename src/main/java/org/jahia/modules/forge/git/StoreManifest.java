@@ -66,10 +66,31 @@ public final class StoreManifest {
     private final List<String> dependencies;
     private final String descriptionMarkdown;
     private final List<VersionLink> versions;
+    private final List<TabLink> tabs;
+
+    /** One entry of the {@code ## Tabs} section: the title of the tab and the Markdown file of its content. */
+    public static final class TabLink {
+        private final String title;
+        private final String file;
+
+        TabLink(String title, String file) {
+            this.title = title;
+            this.file = file;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        /** The Markdown file, relative to the root of the repository. */
+        public String getFile() {
+            return file;
+        }
+    }
 
     StoreManifest(String name, String groupId, String title, String license, String icon, List<String> screenshots,
                   String author, String authorUrl, String authorEmail, String requiredVersion,
-                  List<String> dependencies, String descriptionMarkdown, List<VersionLink> versions) {
+                  List<String> dependencies, String descriptionMarkdown, List<VersionLink> versions, List<TabLink> tabs) {
         this.name = name;
         this.groupId = groupId;
         this.title = title;
@@ -83,6 +104,7 @@ public final class StoreManifest {
         this.dependencies = dependencies == null ? Collections.emptyList() : Collections.unmodifiableList(dependencies);
         this.descriptionMarkdown = descriptionMarkdown == null ? "" : descriptionMarkdown;
         this.versions = versions == null ? Collections.emptyList() : Collections.unmodifiableList(versions);
+        this.tabs = tabs == null ? Collections.emptyList() : Collections.unmodifiableList(tabs);
     }
 
     public String getName() {
@@ -146,5 +168,10 @@ public final class StoreManifest {
     /** The versions of the {@code ## Versions} section, in the order of the file. */
     public List<VersionLink> getVersions() {
         return versions;
+    }
+
+    /** The tabs of the {@code ## Tabs} section, in the order of the file. */
+    public List<TabLink> getTabs() {
+        return tabs;
     }
 }
