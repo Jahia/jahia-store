@@ -33,6 +33,17 @@ require('cypress-terminal-report/src/installLogsCollector')();
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 require('@jahia/cypress/dist/support/registerSupport').registerSupport();
 
+// A version reaches the public once its validation approves it (jahia-store docs/validation.md).
+// 29-validation.cy.ts covers that gate and turns it on for itself; every other spec publishes
+// versions as the store did before the gate, so the suite runs with the gate off.
+before(() => {
+    cy.login();
+    cy.apollo({
+        mutationFile: 'graphql/mutation/setValidationRequireApproval.graphql',
+        variables: {value: 'false'}
+    });
+});
+
 Cypress.on('uncaught:exception', () => {
     // Returning false here prevents Cypress from
     // failing the test

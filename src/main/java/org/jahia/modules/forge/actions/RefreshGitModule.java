@@ -34,6 +34,7 @@ import org.jahia.modules.forge.git.GitModule;
 import org.jahia.modules.forge.git.GitModuleRegistrations;
 import org.jahia.modules.forge.git.GitStoreDataSource;
 import org.jahia.modules.forge.git.StoreManifestException;
+import org.jahia.modules.forge.validation.ValidationService;
 import org.jahia.services.cache.CacheHelper;
 import org.jahia.services.content.JCRNodeWrapper;
 import org.jahia.services.content.JCRSessionWrapper;
@@ -44,6 +45,7 @@ import org.jahia.services.render.URLResolver;
 import org.json.JSONObject;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,6 +67,9 @@ public class RefreshGitModule extends Action {
     static final String PERMISSION_ADMIN = "siteAdminForgeSettings";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RefreshGitModule.class);
+
+    @Reference
+    private ValidationService validationService;
     private static final String ERR_NOT_GIT = "forge.gitModule.error.not.git";
     private static final String ERR_NOT_OWNER = "forge.gitModule.error.not.owner";
     private static final String ERR_REFRESH = "forge.gitModule.error.refresh";
@@ -116,6 +121,8 @@ public class RefreshGitModule extends Action {
             LOGGER.warn("RefreshGitModule: {} could not refresh {}: {}", username, name, e.getMessage());
             return GitModuleActions.errorWithReason(session, ERR_REFRESH, e.getMessage());
         }
+        // A version new to the store goes through the validation before it reaches the public.
+        validationService.requestMissing(GitModuleRegistrations.artifactsOf(renderContext.getSite().getSiteKey(), reading), username);
         CacheHelper.flushOutputCachesForPath(renderContext.getSite().getPath(), true);
         LOGGER.info("RefreshGitModule: {} refreshed the git-backed module {}: {} versions", username, name, reading.getVersions().size());
         return new ActionResult(HttpServletResponse.SC_OK, null,

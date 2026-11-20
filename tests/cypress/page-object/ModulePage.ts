@@ -64,6 +64,14 @@ export class ModulePage {
         return this;
     }
 
+    /** The page offers no version at all: nothing is released. */
+    expectNoVersions(): ModulePage {
+        cy.get('h1', {timeout: 20000});
+        cy.get('[data-versions-open]').should('not.exist');
+        cy.get('[data-latest-download]').should('not.exist');
+        return this;
+    }
+
     openVersions(): VersionsDialog {
         cy.get('[data-versions-open][data-versions-ready="true"]', {timeout: 20000}).click();
         cy.get('[data-versions-dialog][open]', {timeout: 20000}).should('be.visible');
@@ -201,6 +209,56 @@ export class VersionEntry {
 
     expectChangelogLink(url: string): VersionEntry {
         this.entry().find('[data-version-changelog]').should('have.attr', 'href', url);
+        return this;
+    }
+
+    /** The validation block of the version says the status, or "none" when it was never validated. */
+    expectValidation(status: 'none' | 'pending' | 'approved' | 'review' | 'rejected'): VersionEntry {
+        this.entry().find('[data-validation]').should('have.attr', 'data-validation', status);
+        return this;
+    }
+
+    /** One check of the validation block, by its key, with its status and a comment it shows. */
+    expectCheck(checkKey: string, status: string, comment?: string): VersionEntry {
+        this.entry().find(`[data-validation-check="${checkKey}"] [data-validation-status]`).should('have.attr', 'data-validation-status', status);
+        if (comment) {
+            this.entry().find(`[data-validation-check="${checkKey}"]`).should('contain.text', comment);
+        }
+
+        return this;
+    }
+
+    /** The owner cannot publish the version yet: the publish control gives way to the reason. */
+    expectPublishBlocked(): VersionEntry {
+        this.entry().find('[data-publish-blocked]').should('be.visible');
+        this.entry().find('[data-publish-scope="version"]').should('not.exist');
+        return this;
+    }
+
+    expectPublishControl(): VersionEntry {
+        this.entry().find('[data-publish-scope="version"]').should('exist');
+        this.entry().find('[data-publish-blocked]').should('not.exist');
+        return this;
+    }
+
+    /** Press "Validate": the store runs the checks again and the page reloads. */
+    validate(): VersionEntry {
+        // Stamp the window, click, and wait until the stamp is gone: a reload replaces the window,
+        // whereas a DOM node would detach mid-navigation.
+        cy.window().then(w => {
+            (w as unknown as {__beforeReload?: boolean}).__beforeReload = true;
+        });
+        this.entry().find(`[data-request-validation="${this.number}"][data-request-validation-ready="true"] button`, {timeout: 20000}).click();
+        cy.window({timeout: 30000}).should(w => {
+            expect((w as unknown as {__beforeReload?: boolean}).__beforeReload).to.be.undefined;
+        });
+        return this;
+    }
+
+    /** Publish the version through its control; the control reads published afterwards. */
+    publish(): VersionEntry {
+        this.entry().find('[data-publish-scope="version"][data-publish-ready="true"] button', {timeout: 20000}).click();
+        this.entry().find('[data-publish-scope="version"]', {timeout: 20000}).should('have.attr', 'data-published', 'true');
         return this;
     }
 }

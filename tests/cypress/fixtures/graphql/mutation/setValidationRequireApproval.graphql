@@ -1,0 +1,9 @@
+mutation SetValidationRequireApproval($value: String!) {
+    admin {
+        jahia {
+            configuration(pid: "org.jahia.modules.forge.validation") {
+                value(name: "requireApproval", value: $value)
+            }
+        }
+    }
+}

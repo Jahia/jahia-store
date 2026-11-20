@@ -40,6 +40,9 @@
 
 [jnt:forgeMyModulesList] > jnt:content,  jmix:list, jmix:forge, mix:title
 
+// The dashboard of the validations of a store (docs/validation.md), for its administrators.
+[jnt:forgeValidationDashboard] > jnt:content, jmix:forge, mix:title
+
 [jnt:forgePackageModule] > jnt:content
  - moduleName (string)
  - moduleVersion (string)
@@ -131,6 +134,32 @@
  + * (jnt:file) = jnt:file
 
 [jnt:forgeModuleScreenshotsList] > jnt:forgeScreenshotsList
+
+// The validations of a store (docs/validation.md): <site>/contents/validations holds one folder
+// per module, which holds one record per version.
+[jnt:forgeValidationFolder] > jnt:content, jmix:droppableContent, jmix:list
+ + * (jnt:forgeValidationFolder) = jnt:forgeValidationFolder
+ + * (jnt:forgeValidation) = jnt:forgeValidation
+
+// The validation of one version of a module: its status and one check per validator.
+[jnt:forgeValidation] > jnt:content
+ - moduleName (string) indexed=no
+ - versionNumber (string) indexed=no
+ - status (string) indexed=no
+ - artifactUrl (string) indexed=no
+ - requestedBy (string) indexed=no
+ - requestedAt (date) indexed=no
+ - reason (string) indexed=no
+ + * (jnt:forgeValidationCheck) = jnt:forgeValidationCheck
+
+[jnt:forgeValidationCheck] > jnt:content
+ - checkKey (string) indexed=no
+ - label (string) indexed=no
+ - status (string) indexed=no
+ - comments (string) multiple indexed=no
+ - prompt (string) indexed=no
+ - updatedBy (string) indexed=no
+ - updatedAt (date) indexed=no
 
 // One tab of the page of a module: its title and its content, in the order of the list.
 [jnt:forgeTab] > jnt:content, mix:title

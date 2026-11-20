@@ -1,0 +1,7 @@
+mutation ForgeAnswerValidationCheck($siteKey: String!, $moduleName: String!, $version: String!, $check: String!, $answer: String!) {
+    forge {
+        answerValidationCheck(siteKey: $siteKey, moduleName: $moduleName, version: $version, check: $check, answer: $answer) {
+            status
+        }
+    }
+}

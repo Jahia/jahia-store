@@ -160,7 +160,7 @@ The data source serves one module per registration. The root of the provider is 
 | `changeLog` | The release notes, rendered to HTML. A relative link points to the file served beside the version. |
 | `references` | `dependencies` of `VERSION.md`, or of `STORE.md`. |
 | `uploadDate` | `date` of `VERSION.md`, or the date of the tip of the store branch. |
-| `published` | `false` when `VERSION.md` says `disabled: true`, `true` otherwise. |
+| `published` | `true` when `VERSION.md` does not say `disabled: true` and the validation of the version approves it (`validation.md`), `false` otherwise. |
 | `tag`, `tagUrl`, `changelogUrl` | `tag` of `VERSION.md`, and the pages of the tag and of the changelog, named or derived. The storefront links them from the version. |
 
 The i18n properties (`description`, `license`) hold the same value in every language.
@@ -218,8 +218,9 @@ The store reads the repository once, when the module is first requested after th
 serves that reading until a refresh. Nothing refreshes it on its own: no interval, no webhook.
 
 A refresh reads the store branch again and replaces the reading as a whole, or keeps the previous
-reading and reports the cause when the repository cannot be read or fails the contract. Two
-entry points trigger one:
+reading and reports the cause when the repository cannot be read or fails the contract. A
+registration and a refresh validate every version the store never validated, as `validation.md`
+states, and a version reaches the public once approved. Two entry points trigger a refresh:
 
 - The developer who registered the module, or a store administrator, presses "Refresh" on the
   page of the module in the storefront. The button calls the action

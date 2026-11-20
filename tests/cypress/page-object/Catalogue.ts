@@ -29,7 +29,7 @@ export class Catalogue {
                 repositories.forEach(r => modules.push(...r.modules));
                 const entry: {module?: CatalogueModule} = {module: modules.filter(m => m.name === name)[0]};
                 return cy.wrap(entry, {log: false});
-            });
+            }) as unknown as Cypress.Chainable<{module?: CatalogueModule}>;
     }
 
     /** The module lists exactly these versions, whatever their order. */

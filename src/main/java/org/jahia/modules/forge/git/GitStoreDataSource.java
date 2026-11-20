@@ -39,6 +39,7 @@ import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiPredicate;
+import java.util.function.Predicate;
 import javax.jcr.Binary;
 import javax.jcr.ItemNotFoundException;
 import javax.jcr.PathNotFoundException;
@@ -94,6 +95,8 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
     private final String mountPoint;
     private final String filesBaseUrl;
     private final BiPredicate<String, String> isNodeType;
+    /** True when a version may be served as published: the validation of the version allows it. */
+    private volatile Predicate<String> publicationGate = version -> true;
 
     private volatile String registeredBy;
 
@@ -138,6 +141,14 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
      */
     public void setRegisteredBy(String registeredBy) {
         this.registeredBy = StringUtils.trimToNull(registeredBy);
+    }
+
+    /**
+     * The gate a version passes to be served as published, beyond its own file: the validation of
+     * the version (docs/validation.md). Every version passes by default.
+     */
+    public void setPublicationGate(Predicate<String> publicationGate) {
+        this.publicationGate = publicationGate == null ? version -> true : publicationGate;
     }
 
     /**
@@ -351,7 +362,7 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
         putIfPresent(properties, "authorEmail", manifest.getAuthorEmail());
         Instant lastModified = module.getReadAt();
         for (GitModule.Version version : module.getVersions()) {
-            if (!version.isDisabled()) {
+            if (!version.isDisabled() && publicationGate.test(version.getNumber())) {
                 lastModified = version.getDate();
                 break;
             }
@@ -378,9 +389,10 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
         Map<String, String[]> properties = new HashMap<>();
         properties.put("versionNumber", single(version.getNumber()));
         properties.put("url", single(version.getArtifactUrl()));
-        // A disabled version is served unpublished: the storefront shows it to the editors of the
-        // module only, and the catalogue JSON leaves it out, as it does with a local draft.
-        properties.put("published", version.isDisabled() ? FALSE : TRUE);
+        // A disabled version, or one the validation has not approved, is served unpublished: the
+        // storefront shows it to the editors of the module only, and the catalogue JSON leaves it
+        // out, as it does with a local draft.
+        properties.put("published", version.isDisabled() || !publicationGate.test(version.getNumber()) ? FALSE : TRUE);
         putIfPresent(properties, "changeLog", version.getNotesHtml());
         putIfPresent(properties, "tag", version.getTag());
         putIfPresent(properties, "tagUrl", version.getTagUrl());

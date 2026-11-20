@@ -58,6 +58,39 @@ public class ForgeMutation {
     }
 
     @GraphQLField
+    @GraphQLName("requestValidation")
+    @GraphQLDescription("Validate a version of a module, now: every registered check runs and the record replaces the previous one. For the owner of the module or a store administrator.")
+    public GqlValidation requestValidation(
+            @GraphQLName("siteKey") @GraphQLNonNull final String siteKey,
+            @GraphQLName("moduleName") @GraphQLNonNull final String moduleName,
+            @GraphQLName("version") @GraphQLNonNull final String version) {
+        return ValidationExtension.request(siteKey, moduleName, version);
+    }
+
+    @GraphQLField
+    @GraphQLName("answerValidationCheck")
+    @GraphQLDescription("Answer a check of a version that waits for a human: the JSON the prompt asks for, or a text whose first word is approved, rejected or review. For a store administrator.")
+    public GqlValidation answerValidationCheck(
+            @GraphQLName("siteKey") @GraphQLNonNull final String siteKey,
+            @GraphQLName("moduleName") @GraphQLNonNull final String moduleName,
+            @GraphQLName("version") @GraphQLNonNull final String version,
+            @GraphQLName("check") @GraphQLNonNull @GraphQLDescription("The key of the check") final String check,
+            @GraphQLName("answer") @GraphQLNonNull final String answer) {
+        return ValidationExtension.answer(siteKey, moduleName, version, check, answer);
+    }
+
+    @GraphQLField
+    @GraphQLName("invalidateVersion")
+    @GraphQLDescription("Reject a version whatever its checks say, with a reason, and withdraw it from the public. For a store administrator.")
+    public GqlValidation invalidateVersion(
+            @GraphQLName("siteKey") @GraphQLNonNull final String siteKey,
+            @GraphQLName("moduleName") @GraphQLNonNull final String moduleName,
+            @GraphQLName("version") @GraphQLNonNull final String version,
+            @GraphQLName("reason") @GraphQLNonNull final String reason) {
+        return ValidationExtension.invalidate(siteKey, moduleName, version, reason);
+    }
+
+    @GraphQLField
     @GraphQLName("setRootCategory")
     @GraphQLDescription("Set the JCR node configured as the site's root category")
     public Boolean setRootCategory(

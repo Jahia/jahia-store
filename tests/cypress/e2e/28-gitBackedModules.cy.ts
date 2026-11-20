@@ -154,15 +154,13 @@ describe('A module read from a git repository', () => {
         cy.login();
         new GitRepositoryInJahia(siteKey, 'broken-module').publish({'README.md': 'No STORE.md here.\n'});
         cy.login(developer.username, developer.password);
-        MyModulesPage.visit(siteKey)
-            .registerRepository(new GitRepositoryInJahia(siteKey, 'broken-module').url())
-            .expectRegistrationRefused('STORE.md');
+        MyModulesPage.visit(siteKey).registerRepositoryRefused(new GitRepositoryInJahia(siteKey, 'broken-module').url(), 'STORE.md');
     });
 
     it('the developer removes the module from the store, and the repository is untouched', () => {
         cy.login(developer.username, developer.password);
         ModulePage.visit(siteKey, sampleModule.name).removeFromStore();
-        new MyModulesPage().expectNoModule(sampleModule.title);
+        new MyModulesPage(siteKey).expectNoModule(sampleModule.title);
         gitModulesOf(siteKey).should(modules => {
             expect(modules.map(m => m.name)).to.not.include(sampleModule.name);
         });

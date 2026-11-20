@@ -34,6 +34,7 @@ import org.jahia.modules.forge.git.GitModule;
 import org.jahia.modules.forge.git.GitModuleRegistrations;
 import org.jahia.modules.forge.git.GitStoreSettings;
 import org.jahia.modules.forge.git.StoreManifestException;
+import org.jahia.modules.forge.validation.ValidationService;
 import org.jahia.services.cache.CacheHelper;
 import org.jahia.services.content.JCRNodeWrapper;
 import org.jahia.services.content.JCRSessionWrapper;
@@ -71,6 +72,9 @@ public class RegisterGitModule extends Action {
 
     @Reference
     private GitStoreSettings settings;
+
+    @Reference
+    private ValidationService validationService;
 
     @Activate
     public void activate() {
@@ -118,6 +122,8 @@ public class RegisterGitModule extends Action {
         if (!created) {
             return GitModuleActions.errorWithReason(session, ERR_ALREADY_EXISTS, name);
         }
+        // Every version the repository lists goes through the validation before it reaches the public.
+        validationService.requestMissing(GitModuleRegistrations.artifactsOf(renderContext.getSite().getSiteKey(), module), username);
         // The storefront lists and renders modules from cached fragments; the new module must
         // show on the page the browser reloads right after this answer.
         CacheHelper.flushOutputCachesForPath(renderContext.getSite().getPath(), true);

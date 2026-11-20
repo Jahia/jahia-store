@@ -26,9 +26,12 @@ package org.jahia.modules.forge.git;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.List;
 import javax.jcr.RepositoryException;
 import org.apache.commons.lang.StringUtils;
 import org.jahia.modules.external.ExternalContentStoreProvider;
+import org.jahia.modules.forge.validation.ModuleArtifact;
 import org.jahia.services.content.JCRNodeWrapper;
 import org.jahia.services.content.JCRSessionWrapper;
 import org.jahia.services.content.JCRStoreProvider;
@@ -133,6 +136,18 @@ public final class GitModuleRegistrations {
         } catch (RepositoryException e) {
             return false;
         }
+    }
+
+    /** The versions of a reading of a module, the disabled ones left out, as the validation sees them. */
+    public static List<ModuleArtifact> artifactsOf(String siteKey, GitModule module) {
+        List<ModuleArtifact> artifacts = new ArrayList<>();
+        for (GitModule.Version version : module.getVersions()) {
+            if (!version.isDisabled()) {
+                artifacts.add(new ModuleArtifact(siteKey, module.getManifest().getName(), version.getNumber(),
+                        module.getManifest().getGroupId(), version.getArtifactUrl(), module.getRepositoryUrl()));
+            }
+        }
+        return artifacts;
     }
 
     /** The user a mount point was registered for, or null. */

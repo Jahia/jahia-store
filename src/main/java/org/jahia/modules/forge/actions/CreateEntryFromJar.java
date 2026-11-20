@@ -38,6 +38,8 @@ import org.jahia.data.templates.ModuleReleaseInfo;
 import org.jahia.data.templates.ModulesPackage;
 import org.jahia.modules.forge.settings.ForgeSettings;
 import org.jahia.modules.forge.settings.ForgeSettingsService;
+import org.jahia.modules.forge.validation.ModuleArtifact;
+import org.jahia.modules.forge.validation.ValidationService;
 import org.jahia.services.content.JCRNodeWrapper;
 import org.jahia.services.content.JCRSessionWrapper;
 import org.jahia.services.content.decorator.JCRSiteNode;
@@ -153,6 +155,9 @@ public class CreateEntryFromJar extends Action {
 
     @Reference
     private ForgeSettingsService forgeSettingsService;
+
+    @Reference
+    private ValidationService validationService;
 
     @Activate
     public void activate() {
@@ -321,7 +326,35 @@ public class CreateEntryFromJar extends Action {
             moduleVersion.uploadFile(ctx.uploadedFile.getName(), ctx.uploadedFile.getInputStream(), ctx.uploadedFile.getContentType());
             ctx.session.save();
         }
+        // Every version goes through the validation before it reaches the public (docs/validation.md).
+        requestValidation(ctx, module, moduleVersion, groupId, version, deployJar);
         return buildUploadResult(ctx.request, ctx.renderContext, module, ctx.formParams);
+    }
+
+    /** Validate the version just added; a failure of the validation never fails the upload. */
+    private void requestValidation(UploadContext ctx, JCRNodeWrapper module, JCRNodeWrapper moduleVersion, String groupId,
+                                   String version, boolean deployJar) {
+        try {
+            final String siteKey = ctx.renderContext.getSite().getSiteKey();
+            String artifactUrl = null;
+            if (!deployJar) {
+                for (JCRNodeWrapper file : moduleVersion.getNodes()) {
+                    if (file.isNodeType("jnt:file")) {
+                        artifactUrl = "/files/live" + file.getPath();
+                    }
+                }
+            }
+            if (artifactUrl == null) {
+                artifactUrl = "/modules/mavenproxy/" + siteKey + "/" + groupId.replace('.', '/') + "/" + module.getName()
+                        + "/" + version + "/" + module.getName() + "-" + version + ".jar";
+            }
+            final String sourceUrl = module.hasProperty(CODE_REPOSITORY) ? StringUtils.trimToNull(module.getProperty(CODE_REPOSITORY).getString()) : null;
+            validationService.request(new ModuleArtifact(siteKey, module.getName(), version, groupId, artifactUrl, sourceUrl),
+                    ctx.session.getUser().getUsername());
+        } catch (RepositoryException | RuntimeException e) {
+            logger.warn("The validation of {} {} could not be requested: {}", ActionSecurityUtils.sanitizeForLog(module.getName()),
+                    ActionSecurityUtils.sanitizeForLog(version), e.getMessage());
+        }
     }
 
     /**

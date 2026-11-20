@@ -62,4 +62,23 @@ public class ForgeQuery {
             @GraphQLName("siteKey") @GraphQLNonNull final String siteKey) {
         return GitModuleMutationExtension.list(siteKey);
     }
+
+    @GraphQLField
+    @GraphQLName("validation")
+    @GraphQLDescription("The validation of a version of a module, or null when it was never validated; for the owner of the module or a store administrator")
+    public GqlValidation validation(
+            @GraphQLName("siteKey") @GraphQLNonNull final String siteKey,
+            @GraphQLName("moduleName") @GraphQLNonNull final String moduleName,
+            @GraphQLName("version") @GraphQLNonNull final String version) {
+        return ValidationExtension.validation(siteKey, moduleName, version);
+    }
+
+    @GraphQLField
+    @GraphQLName("validations")
+    @GraphQLDescription("The validations of the versions of a site, the newest request first, for a store administrator")
+    public List<GqlValidation> validations(
+            @GraphQLName("siteKey") @GraphQLNonNull final String siteKey,
+            @GraphQLName("status") @GraphQLDescription("pending, approved, review or rejected; every status when absent") final String status) {
+        return ValidationExtension.validations(siteKey, status);
+    }
 }

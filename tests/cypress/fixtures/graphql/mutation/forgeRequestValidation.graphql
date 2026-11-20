@@ -1,0 +1,11 @@
+mutation ForgeRequestValidation($siteKey: String!, $moduleName: String!, $version: String!) {
+    forge {
+        requestValidation(siteKey: $siteKey, moduleName: $moduleName, version: $version) {
+            status
+            checks {
+                key
+                status
+            }
+        }
+    }
+}

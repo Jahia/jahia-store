@@ -1,0 +1,14 @@
+query ForgeValidation($siteKey: String!, $moduleName: String!, $version: String!) {
+    forge {
+        validation(siteKey: $siteKey, moduleName: $moduleName, version: $version) {
+            status
+            reason
+            checks {
+                key
+                label
+                status
+                comments
+            }
+        }
+    }
+}

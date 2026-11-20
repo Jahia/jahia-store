@@ -36,6 +36,7 @@ import org.jahia.modules.forge.git.GitStoreDataSource;
 import org.jahia.modules.forge.git.GitStoreProviderFactory;
 import org.jahia.modules.forge.git.GitStoreSettings;
 import org.jahia.modules.forge.git.StoreManifestException;
+import org.jahia.modules.forge.validation.ValidationService;
 import org.jahia.osgi.BundleUtils;
 import org.jahia.services.cache.CacheHelper;
 import org.jahia.services.content.JCRNodeWrapper;
@@ -76,7 +77,7 @@ public final class GitModuleMutationExtension {
         final String registeredBy = JCRSessionFactory.getInstance().getCurrentUser() == null ? null
                 : JCRSessionFactory.getInstance().getCurrentUser().getUsername();
 
-        return ForgeSiteAccess.executeAsSystemForSite(siteKey, PERMISSION, "Git module registration failed for site ", session -> {
+        GqlGitModule registered = ForgeSiteAccess.executeAsSystemForSite(siteKey, PERMISSION, "Git module registration failed for site ", session -> {
             JCRNodeWrapper repository = modulesRepository(session, siteKey);
             if (GitModuleRegistrations.exists(session, repository, name)) {
                 throw new RepositoryException("A module named '" + name + "' already exists in the store");
@@ -85,6 +86,17 @@ public final class GitModuleMutationExtension {
             CacheHelper.flushOutputCachesForPath(SITES_PATH + siteKey, true);
             return describe(session.getNode(mount.getPath()), repository.getPath());
         });
+        // Every version the repository lists goes through the validation before it reaches the public.
+        validationService().requestMissing(GitModuleRegistrations.artifactsOf(siteKey, module), registeredBy);
+        return registered;
+    }
+
+    private static ValidationService validationService() {
+        ValidationService service = BundleUtils.getOsgiService(ValidationService.class, null);
+        if (service == null) {
+            throw new StoreManifestException("ValidationService is not available");
+        }
+        return service;
     }
 
     public static Boolean unregister(String siteKey, String name) {
@@ -122,11 +134,13 @@ public final class GitModuleMutationExtension {
                     && !caller.getNode(SITES_PATH + siteKey).hasPermission(PERMISSION)) {
                 throw new AccessDeniedException("Only the developer who registered " + name + ", or a store administrator, can refresh it");
             }
+            GitModule reading;
             try {
-                dataSource.refresh();
+                reading = dataSource.refresh();
             } catch (IOException | StoreManifestException e) {
                 throw new RepositoryException("The repository of " + name + " cannot be read: " + e.getMessage(), e);
             }
+            validationService().requestMissing(GitModuleRegistrations.artifactsOf(siteKey, reading), username);
             CacheHelper.flushOutputCachesForPath(SITES_PATH + siteKey, true);
             return Boolean.TRUE;
         });

@@ -33,6 +33,7 @@ import org.jahia.exceptions.JahiaException;
 import org.jahia.exceptions.JahiaInitializationException;
 import org.jahia.modules.external.ExternalContentStoreProvider;
 import org.jahia.modules.external.ExternalContentStoreProviderFactory;
+import org.jahia.modules.forge.validation.ValidationService;
 import org.jahia.services.content.JCRNodeWrapper;
 import org.jahia.services.content.JCRSessionFactory;
 import org.jahia.services.content.JCRStoreProvider;
@@ -66,6 +67,9 @@ public class GitStoreProviderFactory implements ProviderFactory {
     @Reference
     private GitStoreSettings settings;
 
+    @Reference
+    private ValidationService validationService;
+
     @Override
     public String getNodeTypeName() {
         return NODE_TYPE;
@@ -85,6 +89,9 @@ public class GitStoreProviderFactory implements ProviderFactory {
         GitStoreDataSource dataSource = new GitStoreDataSource(reader, settings.getBranch(), siteLanguages(path), path,
                 StringUtils.defaultString(Jahia.getContextPath()) + FILES_SERVLET + path);
         dataSource.setRegisteredBy(optional(mountPoint, P_REGISTERED_BY));
+        String siteKey = StringUtils.substringBetween(path, JahiaSitesService.SITES_JCR_PATH + "/", "/");
+        String moduleName = StringUtils.substringAfterLast(path, "/");
+        dataSource.setPublicationGate(version -> validationService.mayPublish(siteKey, moduleName, version));
 
         ExternalContentStoreProvider provider = externalContentStoreProviderFactory.newProvider();
         provider.setKey(mountPoint.getIdentifier());
