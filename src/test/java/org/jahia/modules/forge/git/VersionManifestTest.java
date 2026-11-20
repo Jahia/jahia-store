@@ -53,6 +53,10 @@ class VersionManifestTest {
         assertThat(version.getDate()).isEqualTo(Instant.parse("2026-03-04T00:00:00Z"));
         assertThat(version.isDisabled()).isFalse();
         assertThat(version.getTag()).isEqualTo("v1.2.0");
+        assertThat(VersionManifest.parse("3.6.0", VALID.replace("tag: v1.2.0", "tag: 3_6_0")).getTag())
+                .as("a tag that YAML would read as a number stays text").isEqualTo("3_6_0");
+        assertThat(VersionManifest.parse("3.6.0", VALID.replace("requiredVersion: 8.2.1.0", "requiredVersion: 8.2")).getRequiredVersion())
+                .isEqualTo("8.2");
         assertThat(version.getTagUrl()).isNull();
         assertThat(version.getChangelogUrl()).isEqualTo("https://example.com/changes/1.2.0");
         assertThatThrownBy(() -> VersionManifest.parse("1.2.0", VALID.replace("https://example.com/changes/1.2.0", "changes.md")))

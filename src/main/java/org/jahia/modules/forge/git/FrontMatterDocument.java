@@ -23,18 +23,20 @@
  */
 package org.jahia.modules.forge.git;
 
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 import org.apache.commons.lang.StringUtils;
+import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
+import org.yaml.snakeyaml.nodes.Tag;
+import org.yaml.snakeyaml.representer.Representer;
+import org.yaml.snakeyaml.resolver.Resolver;
 
 /**
  * A Markdown file with a YAML front matter between two {@code ---} lines, as {@code STORE.md}
@@ -83,11 +85,27 @@ final class FrontMatterDocument {
         throw new StoreManifestException(fileName + " front matter has no closing '---' line");
     }
 
+    /**
+     * YAML reads an unquoted scalar as a number or a date when it looks like one, and a git tag
+     * such as {@code 3_6_0} or a version such as {@code 8.2} is one. Every scalar but a boolean
+     * and a null stays the text that was written.
+     */
+    private static final class TextResolver extends Resolver {
+        @Override
+        protected void addImplicitResolvers() {
+            addImplicitResolver(Tag.BOOL, BOOL, "yYnNtTfFoO", 10);
+            addImplicitResolver(Tag.NULL, NULL, "~nN\0", 10);
+            addImplicitResolver(Tag.NULL, EMPTY, null, 10);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private static Map<String, Object> loadYaml(String fileName, String frontMatter) {
         Object loaded;
         try {
-            loaded = new Yaml(new SafeConstructor(new LoaderOptions())).load(frontMatter);
+            LoaderOptions options = new LoaderOptions();
+            loaded = new Yaml(new SafeConstructor(options), new Representer(new DumperOptions()), new DumperOptions(), options,
+                    new TextResolver()).load(frontMatter);
         } catch (RuntimeException e) {
             throw new StoreManifestException(fileName + " front matter is not valid YAML: " + e.getMessage(), e);
         }
@@ -125,10 +143,6 @@ final class FrontMatterDocument {
         }
         if (value instanceof List || value instanceof Map) {
             throw new StoreManifestException(fileName + " field '" + field + "' must be a single value");
-        }
-        if (value instanceof Date) {
-            // YAML reads an unquoted 2026-03-04 as a timestamp at midnight UTC; give the day back.
-            return ((Date) value).toInstant().atZone(ZoneOffset.UTC).toLocalDate().toString();
         }
         String text = String.valueOf(value).trim();
         return StringUtils.isEmpty(text) ? null : text;
