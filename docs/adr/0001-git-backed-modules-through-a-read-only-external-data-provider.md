@@ -37,7 +37,7 @@ Chosen option: "A read-only external data provider that serves the repository as
 
 ### Confirmation
 
-A module registered by its repository URL lists in the catalogue JSON with one version per matching tag, and no write reaches the repository.
+A module registered by its repository URL lists in the catalogue JSON with the versions its repository declares, and no write reaches the repository.
 
 ## Pros and Cons of the Options
 
