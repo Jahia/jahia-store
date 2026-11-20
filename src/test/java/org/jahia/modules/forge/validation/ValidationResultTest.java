@@ -53,11 +53,39 @@ class ValidationResultTest {
     }
 
     @Test
+    @DisplayName("a JSON with a quote left unescaped in a comment still gives its verdict and its comments")
+    void salvagesBrokenJson() {
+        ValidationResult result = ValidationResult.parseAnswer("{\"status\":\"rejected\",\"comments\":["
+                + "\"META-INF/MANIFEST.MF: approving. The coordinates match.\","
+                + "\"resources/sandbox.properties: must fix. Leftovers of the template (\"system.sandboxTitle=Sandbox\", \"Some Action\").\","
+                + "\"renderingChain.jsp: human review. It ends with <jsp:include page=\"/modules/tools/index.jsp\"/>.\"]}");
+
+        assertThat(result.getStatus()).isEqualTo(ValidationStatus.REJECTED);
+        // The comment with the unescaped quotes splits at its inner quote-comma-quote: nothing is lost.
+        assertThat(result.getComments()).hasSize(4)
+                .contains("META-INF/MANIFEST.MF: approving. The coordinates match.")
+                .contains("renderingChain.jsp: human review. It ends with <jsp:include page=\"/modules/tools/index.jsp\"/>.");
+        assertThat(String.join(" ", result.getComments())).contains("Leftovers of the template").contains("Some Action");
+    }
+
+    @Test
+    @DisplayName("the verdict reads in the words of the assistant, under its own key")
+    void readsPhrasedVerdicts() {
+        assertThat(ValidationResult.parseAnswer("Not approved: a secret in cfg").getStatus()).isEqualTo(ValidationStatus.REJECTED);
+        assertThat(ValidationResult.parseAnswer("Waiting for human review\nthe tools page").getStatus()).isEqualTo(ValidationStatus.REVIEW);
+        ValidationResult result = ValidationResult.parseAnswer("{\"verdict\": \"Approved with comments\", \"findings\": [{\"file\": \"a.jsp\", \"note\": \"fine\"}]}");
+        assertThat(result.getStatus()).isEqualTo(ValidationStatus.APPROVED);
+        assertThat(result.getComments()).hasSize(1);
+        assertThat(result.getComments().get(0)).contains("a.jsp").contains("fine");
+    }
+
+    @Test
     @DisplayName("an answer without a verdict is refused")
     void refusesNoVerdict() {
         assertThatThrownBy(() -> ValidationResult.parseAnswer("looks fine to me")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> ValidationResult.parseAnswer("  ")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> ValidationResult.parseAnswer("pending")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> ValidationResult.parseAnswer("{\"status\": \"unknown\"}")).hasMessageContaining("starts with \"{");
     }
 
     @Test

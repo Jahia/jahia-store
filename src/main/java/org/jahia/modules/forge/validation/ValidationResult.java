@@ -27,6 +27,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.apache.commons.lang.StringUtils;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -65,10 +68,24 @@ public final class ValidationResult {
         return new ValidationResult(status, comments, null);
     }
 
+    /** The keys an assistant uses for its verdict, the one the prompt asks for first. */
+    private static final String[] STATUS_KEYS = {"status", "verdict", "result", "decision"};
+    /** The keys an assistant uses for its findings, the one the prompt asks for first. */
+    private static final String[] COMMENT_KEYS = {"comments", "findings", "comment", "reasons", "notes"};
+    /** The verdict of a JSON that does not parse, such as one with a quote left unescaped in a comment. */
+    private static final Pattern BROKEN_STATUS = Pattern.compile(
+            "[\"']?(?:status|verdict|result|decision)[\"']?\\s*:\\s*[\"']?([A-Za-z][A-Za-z ]*?)\\s*[\"']?\\s*[,}]", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BROKEN_COMMENTS = Pattern.compile("[\"']?(?:comments|findings)[\"']?\\s*:\\s*\\[(.*)]", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    /** A boundary between two entries of a broken array: a closing quote, a comma, an opening quote. */
+    private static final Pattern BROKEN_ENTRY_BOUNDARY = Pattern.compile("\"\\s*,\\s*\"");
+
     /**
      * The answer a human pastes for a check: the JSON {@code {"status": "approved", "comments":
-     * ["..."]}} that the prompt asks for, or a text whose first word is the verdict (approved,
-     * rejected or review) and whose remaining lines are the comments.
+     * ["..."]}} that the prompt asks for, or a text whose first line starts with the verdict
+     * (approved, rejected or review, in the words of the assistant) and whose remaining lines
+     * are the comments. A JSON that does not parse, such as one with a quote left unescaped in
+     * a comment, still gives its verdict and its comments, split at the quote-comma-quote
+     * boundaries of the array.
      *
      * @throws IllegalArgumentException when no verdict can be read
      */
@@ -79,37 +96,35 @@ public final class ValidationResult {
         }
         int brace = text.indexOf('{');
         if (brace >= 0 && text.lastIndexOf('}') > brace) {
+            String object = text.substring(brace, text.lastIndexOf('}') + 1);
+            ValidationResult result;
             try {
-                JSONObject json = new JSONObject(text.substring(brace, text.lastIndexOf('}') + 1));
-                ValidationStatus status = ValidationStatus.of(json.optString("status", null));
-                if (status != null) {
-                    List<String> comments = new ArrayList<>();
-                    JSONArray array = json.optJSONArray("comments");
-                    if (array != null) {
-                        for (int i = 0; i < array.length(); i++) {
-                            String comment = StringUtils.trimToNull(array.optString(i, null));
-                            if (comment != null) {
-                                comments.add(comment);
-                            }
-                        }
-                    } else if (StringUtils.isNotBlank(json.optString("comments", null))) {
-                        comments.add(json.optString("comments").trim());
-                    }
-                    return new ValidationResult(status, comments, null);
-                }
+                result = fromJson(new JSONObject(object));
             } catch (JSONException e) {
-                // Not JSON after all: read it as text.
+                result = fromBrokenJson(object);
+            }
+            if (result != null) {
+                return result;
             }
         }
         String[] lines = text.split("\r?\n");
-        String[] firstWords = lines[0].trim().split("[\\s:,.;-]+", 2);
-        ValidationStatus status = ValidationStatus.of(firstWords[0]);
-        if (status == null || status == ValidationStatus.PENDING) {
-            throw new IllegalArgumentException("The answer must start with approved, rejected or review, or be the JSON the prompt asks for");
+        String first = lines[0].trim();
+        int colon = first.indexOf(':');
+        ValidationStatus status = verdict(colon > 0 ? first.substring(0, colon) : first);
+        String rest = colon > 0 ? first.substring(colon + 1) : "";
+        if (status == null && colon < 0) {
+            // "approved nothing to report": the verdict is the first word, the comment follows.
+            String[] words = first.split("[\\s,.;-]+", 2);
+            status = verdict(words[0]);
+            rest = words.length > 1 ? words[1] : "";
+        }
+        if (status == null) {
+            throw new IllegalArgumentException("The answer must start with approved, rejected or review, or be the JSON the prompt asks for; it starts with \""
+                    + StringUtils.abbreviate(first, 60) + "\"");
         }
         List<String> comments = new ArrayList<>();
-        if (firstWords.length > 1 && StringUtils.isNotBlank(firstWords[1])) {
-            comments.add(firstWords[1].trim());
+        if (StringUtils.isNotBlank(rest)) {
+            comments.add(rest.trim());
         }
         for (int i = 1; i < lines.length; i++) {
             if (StringUtils.isNotBlank(lines[i])) {
@@ -117,6 +132,81 @@ public final class ValidationResult {
             }
         }
         return new ValidationResult(status, comments, null);
+    }
+
+    /**
+     * The verdict in the words of an assistant: "approved", "Not approved", "APPROVED with
+     * comments", "waiting for human review", "rejected"; null when the words carry none.
+     */
+    static ValidationStatus verdict(String words) {
+        String lower = StringUtils.trimToEmpty(words).toLowerCase(Locale.ROOT);
+        if (lower.isEmpty()) {
+            return null;
+        }
+        if (lower.contains("reject") || lower.contains("not approved") || lower.contains("refus") || lower.contains("fail")) {
+            return ValidationStatus.REJECTED;
+        }
+        if (lower.contains("review") || lower.contains("wait")) {
+            return ValidationStatus.REVIEW;
+        }
+        if (lower.contains("approv") || lower.contains("accept") || lower.contains("pass")) {
+            return ValidationStatus.APPROVED;
+        }
+        return null;
+    }
+
+    /** The result of a parsed JSON answer, or null when no key carries a verdict. */
+    private static ValidationResult fromJson(JSONObject json) {
+        ValidationStatus status = null;
+        for (String key : STATUS_KEYS) {
+            status = verdict(json.optString(key, null));
+            if (status != null) {
+                break;
+            }
+        }
+        if (status == null) {
+            return null;
+        }
+        List<String> comments = new ArrayList<>();
+        for (String key : COMMENT_KEYS) {
+            if (!json.has(key)) {
+                continue;
+            }
+            JSONArray array = json.optJSONArray(key);
+            if (array != null) {
+                for (int i = 0; i < array.length(); i++) {
+                    Object entry = array.opt(i);
+                    String comment = StringUtils.trimToNull(entry == null ? null : entry.toString());
+                    if (comment != null) {
+                        comments.add(comment);
+                    }
+                }
+            } else if (StringUtils.isNotBlank(json.optString(key, null))) {
+                comments.add(json.optString(key).trim());
+            }
+            break;
+        }
+        return new ValidationResult(status, comments, null);
+    }
+
+    /** The result of a JSON answer that does not parse, read with patterns, or null without a verdict. */
+    private static ValidationResult fromBrokenJson(String object) {
+        Matcher status = BROKEN_STATUS.matcher(object);
+        ValidationStatus verdict = status.find() ? verdict(status.group(1)) : null;
+        if (verdict == null) {
+            return null;
+        }
+        List<String> comments = new ArrayList<>();
+        Matcher array = BROKEN_COMMENTS.matcher(object);
+        if (array.find()) {
+            for (String entry : BROKEN_ENTRY_BOUNDARY.split(array.group(1))) {
+                String comment = StringUtils.trimToNull(StringUtils.strip(entry.trim(), "\"'"));
+                if (comment != null) {
+                    comments.add(comment);
+                }
+            }
+        }
+        return new ValidationResult(verdict, comments, null);
     }
 
     public ValidationStatus getStatus() {

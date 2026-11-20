@@ -11,4 +11,4 @@ Answer with one JSON object and nothing else:
 
 {"status": "approved" | "rejected" | "review", "comments": ["one finding per entry: severity, file, pattern, fix"]}
 
-`approved` when no finding reaches medium severity, `rejected` when a finding blocks the publication, `review` when a finding needs a human to confirm it is exploitable.
+`approved` when no finding reaches medium severity, `rejected` when a finding blocks the publication, `review` when a finding needs a human to confirm it is exploitable. The object must be valid JSON: inside a comment, write a double quote as `\"` or use single quotes.

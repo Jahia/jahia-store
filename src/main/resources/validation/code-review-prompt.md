@@ -15,4 +15,4 @@ Answer with one JSON object and nothing else:
 
 {"status": "approved" | "rejected" | "review", "comments": ["one finding per entry, each naming the file and what to change"]}
 
-`approved` when nothing blocks the publication, `rejected` when a finding must be fixed first, `review` when a human must look at something you cannot decide. Keep every finding in the comments, the approving ones included.
+`approved` when nothing blocks the publication, `rejected` when a finding must be fixed first, `review` when a human must look at something you cannot decide. Keep every finding in the comments, the approving ones included. The object must be valid JSON: inside a comment, write a double quote as `\"` or use single quotes.
