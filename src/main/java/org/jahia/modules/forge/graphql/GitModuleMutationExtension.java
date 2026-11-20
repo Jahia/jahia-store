@@ -26,10 +26,10 @@ package org.jahia.modules.forge.graphql;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import javax.jcr.AccessDeniedException;
 import javax.jcr.RepositoryException;
 import org.apache.commons.lang.StringUtils;
 import org.apache.jackrabbit.core.fs.FileSystem;
-import org.jahia.modules.external.ExternalContentStoreProvider;
 import org.jahia.modules.forge.git.GitModule;
 import org.jahia.modules.forge.git.GitModuleRegistrations;
 import org.jahia.modules.forge.git.GitStoreDataSource;
@@ -41,18 +41,19 @@ import org.jahia.services.cache.CacheHelper;
 import org.jahia.services.content.JCRNodeWrapper;
 import org.jahia.services.content.JCRSessionFactory;
 import org.jahia.services.content.JCRSessionWrapper;
-import org.jahia.services.content.JCRStoreProvider;
 import org.jahia.services.content.decorator.JCRMountPointNode;
 import org.jahia.services.sites.JahiaSitesService;
 
 /**
- * The administration side of git-backed modules (docs/git-backed-modules.md): register, list,
- * refresh and remove, for a caller who administers the store of the site. A store developer
- * registers a repository from the storefront instead, through the registerGitModule action.
+ * The GraphQL side of git-backed modules (docs/git-backed-modules.md): register, list and remove,
+ * for a caller who administers the store of the site, and refresh, for the developer who
+ * registered the module too. A store developer registers and refreshes a repository from the
+ * storefront through the actions.
  */
 public final class GitModuleMutationExtension {
 
     static final String PERMISSION = "siteAdminForgeSettings";
+    static final String PERMISSION_UPLOAD = "jahiaForgeUploadModule";
     static final String MODULES_REPOSITORY = "contents/modules-repository";
 
     private static final String SITES_PATH = JahiaSitesService.SITES_JCR_PATH + FileSystem.SEPARATOR;
@@ -60,12 +61,12 @@ public final class GitModuleMutationExtension {
     private GitModuleMutationExtension() {
     }
 
-    public static GqlGitModule register(String siteKey, String gitUrl, String tagPattern, String branch) {
+    public static GqlGitModule register(String siteKey, String gitUrl) {
         final String url;
         final GitModule module;
         try {
             url = GitModuleRegistrations.validateGitUrl(gitUrl);
-            module = GitModuleRegistrations.read(settings(), url, tagPattern, branch);
+            module = GitModuleRegistrations.read(settings(), url);
         } catch (IOException | RuntimeException e) {
             // StoreManifestException is the expected refusal; any other runtime failure of the
             // git transport is reported the same way rather than as a bare server error.
@@ -80,7 +81,7 @@ public final class GitModuleMutationExtension {
             if (GitModuleRegistrations.exists(session, repository, name)) {
                 throw new RepositoryException("A module named '" + name + "' already exists in the store");
             }
-            JCRNodeWrapper mount = GitModuleRegistrations.register(session, repository, url, tagPattern, branch, registeredBy, name);
+            JCRNodeWrapper mount = GitModuleRegistrations.register(session, repository, url, registeredBy, name);
             CacheHelper.flushOutputCachesForPath(SITES_PATH + siteKey, true);
             return describe(session.getNode(mount.getPath()), repository.getPath());
         });
@@ -101,19 +102,32 @@ public final class GitModuleMutationExtension {
         });
     }
 
+    /**
+     * Read the repository of a module again, now, for the developer who registered it or a store
+     * administrator: the entry point of a process outside the store, such as the release workflow
+     * of the repository. False when the module is not a mounted git-backed module; a repository
+     * that cannot be read keeps the previous reading and the mutation fails with the cause.
+     */
     public static Boolean refresh(String siteKey, String name) {
-        return ForgeSiteAccess.executeAsSystemForSite(siteKey, PERMISSION, "Git module refresh failed for site ", session -> {
+        return ForgeSiteAccess.executeAsSystemForSite(siteKey, PERMISSION_UPLOAD, "Git module refresh failed for site ", session -> {
             JCRNodeWrapper repository = modulesRepository(session, siteKey);
             JCRNodeWrapper mount = GitModuleRegistrations.mountOf(session, repository, name);
-            if (!(mount instanceof JCRMountPointNode)) {
+            GitStoreDataSource dataSource = mount == null ? null : GitModuleRegistrations.dataSourceOf(mount);
+            if (dataSource == null) {
                 return Boolean.FALSE;
             }
-            JCRStoreProvider provider = ((JCRMountPointNode) mount).getMountProvider();
-            if (provider instanceof ExternalContentStoreProvider
-                    && ((ExternalContentStoreProvider) provider).getDataSource() instanceof GitStoreDataSource) {
-                ((GitStoreDataSource) ((ExternalContentStoreProvider) provider).getDataSource()).requestRefresh();
+            JCRSessionWrapper caller = JCRSessionFactory.getInstance().getCurrentUserSession();
+            String username = caller.getUser().getUsername();
+            if (!username.equals(GitModuleRegistrations.registeredBy(mount))
+                    && !caller.getNode(SITES_PATH + siteKey).hasPermission(PERMISSION)) {
+                throw new AccessDeniedException("Only the developer who registered " + name + ", or a store administrator, can refresh it");
             }
-            CacheHelper.flushOutputCachesForPath(repository.getPath() + "/" + name, true);
+            try {
+                dataSource.refresh();
+            } catch (IOException | StoreManifestException e) {
+                throw new RepositoryException("The repository of " + name + " cannot be read: " + e.getMessage(), e);
+            }
+            CacheHelper.flushOutputCachesForPath(SITES_PATH + siteKey, true);
             return Boolean.TRUE;
         });
     }
@@ -145,14 +159,8 @@ public final class GitModuleMutationExtension {
         String status = mount instanceof JCRMountPointNode ? ((JCRMountPointNode) mount).getMountStatus().name() : "unknown";
         return new GqlGitModule(name,
                 mount.getProperty(GitStoreProviderFactory.P_GIT_URL).getString(),
-                optional(mount, GitStoreProviderFactory.P_TAG_PATTERN),
-                optional(mount, GitStoreProviderFactory.P_BRANCH),
-                optional(mount, GitStoreProviderFactory.P_REGISTERED_BY),
+                GitModuleRegistrations.registeredBy(mount),
                 repositoryPath + "/" + name, status);
-    }
-
-    private static String optional(JCRNodeWrapper node, String property) throws RepositoryException {
-        return node.hasProperty(property) ? StringUtils.trimToNull(node.getProperty(property).getString()) : null;
     }
 
     private static GitStoreSettings settings() {

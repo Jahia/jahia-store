@@ -23,8 +23,12 @@
  */
 package org.jahia.modules.forge.git;
 
+import java.util.Map;
+import org.commonmark.node.Image;
+import org.commonmark.node.Link;
 import org.commonmark.node.Node;
 import org.commonmark.parser.Parser;
+import org.commonmark.renderer.html.AttributeProvider;
 import org.commonmark.renderer.html.HtmlRenderer;
 
 /**
@@ -40,10 +44,45 @@ final class Markdown {
     }
 
     static String toHtml(String markdown) {
+        return toHtml(markdown, null);
+    }
+
+    /**
+     * @param baseUrl the URL a relative link or image is resolved against, with its trailing
+     *                slash, or null to leave relative links as they are
+     */
+    static String toHtml(String markdown, String baseUrl) {
         if (markdown == null || markdown.trim().isEmpty()) {
             return "";
         }
         Node document = PARSER.parse(markdown);
-        return RENDERER.render(document).trim();
+        HtmlRenderer renderer = baseUrl == null ? RENDERER
+                : HtmlRenderer.builder().escapeHtml(true).attributeProviderFactory(context -> new RelativeLinks(baseUrl)).build();
+        return renderer.render(document).trim();
+    }
+
+    /** Prefixes a relative {@code href} or {@code src} with the base URL. An absolute or anchor link stays. */
+    private static final class RelativeLinks implements AttributeProvider {
+        private final String baseUrl;
+
+        private RelativeLinks(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        @Override
+        public void setAttributes(Node node, String tagName, Map<String, String> attributes) {
+            String attribute = node instanceof Image ? "src" : node instanceof Link ? "href" : null;
+            if (attribute == null) {
+                return;
+            }
+            String value = attributes.get(attribute);
+            if (value != null && isRelative(value)) {
+                attributes.put(attribute, baseUrl + (value.startsWith("./") ? value.substring(2) : value));
+            }
+        }
+
+        private static boolean isRelative(String url) {
+            return !url.isEmpty() && !url.startsWith("/") && !url.startsWith("#") && !url.contains(":") && !url.startsWith("..");
+        }
     }
 }

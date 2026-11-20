@@ -24,11 +24,11 @@
 package org.jahia.modules.forge.git;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Set;
 import javax.jcr.RepositoryException;
 import org.apache.commons.lang.StringUtils;
+import org.jahia.bin.Jahia;
 import org.jahia.exceptions.JahiaException;
 import org.jahia.exceptions.JahiaInitializationException;
 import org.jahia.modules.external.ExternalContentStoreProvider;
@@ -47,18 +47,18 @@ import org.slf4j.LoggerFactory;
 /**
  * Mounts a {@code jnt:gitStoreMountPoint} node as a read-only external provider that serves the
  * module of the repository the node names. Jahia calls it for each such node at startup and
- * when one is created.
+ * when one is created. Nothing extends the nodes it serves: the repository is the whole module.
  */
 @Component(service = ProviderFactory.class, immediate = true)
 public class GitStoreProviderFactory implements ProviderFactory {
 
     public static final String NODE_TYPE = "jnt:gitStoreMountPoint";
     public static final String P_GIT_URL = "j:gitUrl";
-    public static final String P_TAG_PATTERN = "j:tagPattern";
-    public static final String P_BRANCH = "j:branch";
     public static final String P_REGISTERED_BY = "j:registeredBy";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GitStoreProviderFactory.class);
+    /** The servlet that serves a {@code jnt:file} of the live workspace by its path. */
+    private static final String FILES_SERVLET = "/files/live";
 
     @Reference
     private ExternalContentStoreProviderFactory externalContentStoreProviderFactory;
@@ -74,8 +74,6 @@ public class GitStoreProviderFactory implements ProviderFactory {
     @Override
     public JCRStoreProvider mountProvider(JCRNodeWrapper mountPoint) throws RepositoryException {
         String url = mountPoint.getProperty(P_GIT_URL).getString();
-        String pattern = optional(mountPoint, P_TAG_PATTERN);
-        String branch = optional(mountPoint, P_BRANCH);
         String path = mountPoint.getPath();
 
         GitRepositoryReader reader;
@@ -84,9 +82,8 @@ public class GitStoreProviderFactory implements ProviderFactory {
         } catch (IOException e) {
             throw new RepositoryException("Cannot open the git cache for " + url, e);
         }
-        GitStoreDataSource dataSource = new GitStoreDataSource(reader, branch,
-                VersionTags.compile(StringUtils.defaultIfBlank(pattern, settings.getDefaultTagPattern())),
-                settings.getRefreshMillis(), siteLanguages(path), path);
+        GitStoreDataSource dataSource = new GitStoreDataSource(reader, settings.getBranch(), siteLanguages(path), path,
+                StringUtils.defaultString(Jahia.getContextPath()) + FILES_SERVLET + path);
         dataSource.setRegisteredBy(optional(mountPoint, P_REGISTERED_BY));
 
         ExternalContentStoreProvider provider = externalContentStoreProviderFactory.newProvider();
@@ -95,8 +92,6 @@ public class GitStoreProviderFactory implements ProviderFactory {
         provider.setDataSource(dataSource);
         provider.setDynamicallyMounted(true);
         provider.setSessionFactory(JCRSessionFactory.getInstance());
-        // The store keeps beside a git-backed node what the repository does not hold.
-        provider.setExtendableTypes(Arrays.asList(GitStoreDataSource.TYPE_MODULE, GitStoreDataSource.TYPE_VERSION));
         try {
             provider.start();
         } catch (JahiaInitializationException e) {

@@ -25,22 +25,22 @@ package org.jahia.modules.forge.git;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Pattern;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Builds a {@link GitModule} from a repository, as docs/git-backed-modules.md states: the root
- * {@code STORE.md} on the branch, one version per tag that matches the pattern, with the
- * {@code STORE.md} and the {@code CHANGELOG.md} as they stand at that tag.
+ * Builds a {@link GitModule} from the store branch of a repository, as docs/git-backed-modules.md
+ * states: the root {@code STORE.md}, then the {@code VERSION.md} and the files of the folder of
+ * each version it lists.
  */
 public final class GitModuleLoader {
 
-    static final String STORE_MD = "STORE.md";
-    static final String STORE_INDEX_MD = "store/index.md";
+    static final String STORE_MD = StoreManifestParser.FILE_NAME;
+    static final String VERSION_MD = VersionManifest.FILE_NAME;
     static final String CHANGELOG_MD = "CHANGELOG.md";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GitModuleLoader.class);
@@ -49,89 +49,83 @@ public final class GitModuleLoader {
     }
 
     /**
-     * @param reader     the repository
-     * @param branch     the branch that holds the root manifest, or null for the default branch
-     * @param tagPattern the pattern a tag must match to be a version
+     * @param reader       the repository
+     * @param branch       the store branch, or null for the default branch of the repository
+     * @param filesBaseUrl the URL under which the files of a version are served, without a
+     *                     trailing slash, or null to leave the relative links of the notes as they are
      * @throws IOException            when the remote cannot be read
      * @throws StoreManifestException when the repository fails the contract
      */
-    public static GitModule load(GitRepositoryReader reader, String branch, Pattern tagPattern) throws IOException {
+    public static GitModule load(GitRepositoryReader reader, String branch, String filesBaseUrl) throws IOException {
         String branchName = StringUtils.isBlank(branch) ? reader.defaultBranch() : branch.trim();
-        String branchRef = reader.fetchBranch(branchName);
-        StoreManifest root = readManifest(reader, branchRef, "the branch " + branchName);
+        String ref = reader.fetchBranch(branchName);
+        byte[] content = reader.readFile(ref, STORE_MD);
+        if (content == null) {
+            throw new StoreManifestException("The repository holds no " + STORE_MD + " on the branch " + branchName);
+        }
+        StoreManifest manifest = StoreManifestParser.parse(new String(content, StandardCharsets.UTF_8));
+        Instant tipDate = reader.commitDate(ref);
 
         List<GitModule.Version> versions = new ArrayList<>();
-        for (String tag : reader.listRemoteTags()) {
-            if (!VersionTags.isVersion(tagPattern, tag)) {
-                continue;
-            }
-            versions.add(readVersion(reader, root, tag));
-        }
-        versions.sort((a, b) -> VersionTags.newestFirst().compare(a.getNumber(), b.getNumber()));
-
-        String iconName = null;
-        String iconMime = null;
-        byte[] iconBytes = null;
-        if (root.getIcon() != null) {
-            iconBytes = reader.readFile(branchRef, root.getIcon());
-            if (iconBytes == null) {
-                LOGGER.warn("The repository {} declares the icon {} and does not hold it", reader.getUrl(), root.getIcon());
-            } else {
-                iconName = StringUtils.substringAfterLast("/" + root.getIcon(), "/");
-                iconMime = imageMimeType(iconName);
+        for (StoreManifest.VersionLink link : manifest.getVersions()) {
+            GitModule.Version version = readVersion(reader, ref, manifest, link, tipDate, filesBaseUrl);
+            if (version != null) {
+                versions.add(version);
             }
         }
-        return new GitModule(reader.getUrl(), branchName, root, versions, iconName, iconMime, iconBytes);
-    }
+        versions.sort((a, b) -> VersionNumbers.newestFirst().compare(a.getNumber(), b.getNumber()));
 
-    /** The MIME type of an icon file by its extension; the formats a browser shows inline. */
-    static String imageMimeType(String fileName) {
-        String ext = StringUtils.substringAfterLast(fileName, ".").toLowerCase();
-        switch (ext) {
-            case "png":
-                return "image/png";
-            case "jpg":
-            case "jpeg":
-                return "image/jpeg";
-            case "gif":
-                return "image/gif";
-            case "svg":
-                return "image/svg+xml";
-            case "webp":
-                return "image/webp";
-            case "ico":
-                return "image/x-icon";
-            default:
-                return "application/octet-stream";
+        GitFile icon = manifest.getIcon() == null ? null : readDeclaredFile(reader, ref, manifest.getIcon(), "icon");
+        List<GitFile> screenshots = new ArrayList<>();
+        for (String path : manifest.getScreenshots()) {
+            GitFile screenshot = readDeclaredFile(reader, ref, path, "screenshot");
+            if (screenshot != null) {
+                screenshots.add(screenshot);
+            }
         }
+        return new GitModule(reader.getUrl(), branchName, manifest, versions, icon, screenshots);
     }
 
-    private static GitModule.Version readVersion(GitRepositoryReader reader, StoreManifest root, String tag) throws IOException {
-        String ref = reader.fetchTag(tag);
-        String number = VersionTags.versionOf(tag);
-        StoreManifest atTag;
-        try {
-            atTag = readManifest(reader, ref, "the tag " + tag);
-        } catch (StoreManifestException e) {
-            // A tag older than the contract still lists: the root manifest names its artefact.
-            LOGGER.warn("The tag {} of {} has no usable STORE.md ({}); using the root manifest", tag, reader.getUrl(), e.getMessage());
-            atTag = root;
-        }
-        byte[] changelog = reader.readFile(ref, CHANGELOG_MD);
-        String section = changelog == null ? null : ChangelogParser.section(new String(changelog, StandardCharsets.UTF_8), number);
-        return new GitModule.Version(tag, number, atTag.artifactUrl(number),
-                section == null ? null : Markdown.toHtml(section),
-                atTag.getRequiredVersion(), atTag.getDependencies(), reader.commitDate(ref));
-    }
-
-    private static StoreManifest readManifest(GitRepositoryReader reader, String ref, String where) throws IOException {
-        byte[] content = reader.readFile(ref, STORE_INDEX_MD);
+    /** The version, or null when its {@code VERSION.md} withdraws it. */
+    private static GitModule.Version readVersion(GitRepositoryReader reader, String ref, StoreManifest manifest,
+                                                 StoreManifest.VersionLink link, Instant tipDate, String filesBaseUrl)
+            throws IOException {
+        String folder = link.getFolder();
+        byte[] content = reader.readFile(ref, folder + "/" + VERSION_MD);
         if (content == null) {
-            content = reader.readFile(ref, STORE_MD);
+            throw new StoreManifestException("The version " + link.getNumber() + " links to " + folder + ", which holds no " + VERSION_MD);
         }
-        if (content == null) {
-            throw new StoreManifestException("The repository holds no " + STORE_MD + " on " + where);
+        VersionManifest version = VersionManifest.parse(link.getNumber(), new String(content, StandardCharsets.UTF_8));
+        if (!version.isAvailable()) {
+            return null;
         }
-        return StoreManifestParser.parse(new String(content, StandardCharsets.UTF_8));
+        String notes = version.getNotesMarkdown();
+        if (StringUtils.isBlank(notes)) {
+            byte[] changelog = reader.readFile(ref, folder + "/" + CHANGELOG_MD);
+            notes = changelog == null ? null : new String(changelog, StandardCharsets.UTF_8);
+        }
+        String notesHtml = StringUtils.isBlank(notes) ? null
+                : Markdown.toHtml(notes, filesBaseUrl == null ? null : filesBaseUrl + "/" + link.getNumber() + "/");
+
+        List<GitFile> files = new ArrayList<>();
+        for (String name : reader.listFiles(ref, folder)) {
+            if (!name.toLowerCase().endsWith(".md")) {
+                files.add(new GitFile(name, reader.readFile(ref, folder + "/" + name)));
+            }
+        }
+        return new GitModule.Version(link.getNumber(), folder, version.getArtifactUrl(), notesHtml,
+                StringUtils.defaultIfBlank(version.getRequiredVersion(), manifest.getRequiredVersion()),
+                version.getDependencies().isEmpty() ? manifest.getDependencies() : version.getDependencies(),
+                version.getDate() == null ? tipDate : version.getDate(), files);
+    }
+
+    /** A file that {@code STORE.md} names, or null, with a warning, when the repository lacks it. */
+    private static GitFile readDeclaredFile(GitRepositoryReader reader, String ref, String path, String what) throws IOException {
+        byte[] bytes = reader.readFile(ref, path);
+        if (bytes == null) {
+            LOGGER.warn("The repository {} declares the {} {} and does not hold it", reader.getUrl(), what, path);
+            return null;
+        }
+        return new GitFile(StringUtils.substringAfterLast("/" + path, "/"), bytes);
     }
 }

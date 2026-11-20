@@ -7,23 +7,32 @@ node with `jnt:forgeModuleVersion` children, through a read-only external data p
 API and the catalogue JSON treat it as any other module. ADR 0001 records why.
 
 This document is the contract: the files the repository must hold, the node mapping, the
-registration, the download path and the cache.
+registration, the refresh, the download path and the cache.
+[`examples/server-availability-manager/`](examples/server-availability-manager/) holds the store
+data of one real module, written to this contract.
 
 ## The repository contract
 
+The store reads one branch of the repository, the store branch: the branch that the module
+configuration names, or the default branch of the repository when it names none. Everything the
+store knows of the module is on that branch. Tags, other branches and the history play no part.
+
 ### `STORE.md`
 
-The repository holds a `STORE.md` at its root. It is a Markdown file with a YAML front matter.
-The front matter carries the store fields, and the Markdown body is the description of the module.
+The store branch holds a `STORE.md` at the root of the repository. It is a Markdown file with a
+YAML front matter. The front matter carries the fields shared by every version, the Markdown body
+is the description of the module, and a `## Versions` section of the body lists the released
+versions.
 
 ```markdown
 ---
 name: my-module
 groupId: org.example.modules
 title: My Module
-artifact: https://github.com/example/my-module/releases/download/v{version}/my-module-{version}.jar
 license: Apache-2.0
-icon: docs/icon.png
+icon: store/icon.png
+screenshots:
+  - store/screenshot-1.png
 author: Example Inc.
 authorUrl: https://example.com
 authorEmail: modules@example.com
@@ -33,6 +42,11 @@ dependencies:
 ---
 
 The description of the module, in Markdown.
+
+## Versions
+
+- [1.2.0](store/1.2.0)
+- [1.1.0](store/1.1.0)
 ```
 
 | Field | Mandatory | Meaning |
@@ -40,41 +54,55 @@ The description of the module, in Markdown.
 | `name` | yes | The module name, which is the `artifactId` and the node name. A Jahia server identifies a module by this name alone. |
 | `groupId` | yes | The Maven `groupId`. One `groupId` per module name across both stores. |
 | `title` | yes | The title shown in the store. |
-| `artifact` | yes | The URL of the artefact of a version. `{version}` is replaced by the version number. The URL is absolute and uses `http` or `https`. |
 | `license` | no | The license of the module, as a short name or a URL. |
 | `icon` | no | The path, inside the repository, of the icon of the module. |
+| `screenshots` | no | The paths, inside the repository, of the screenshots of the module. |
 | `author`, `authorUrl`, `authorEmail` | no | The author shown in the store. |
-| `requiredVersion` | no | The lowest Jahia version the module runs on. |
-| `dependencies` | no | The Jahia modules the module depends on. |
+| `requiredVersion` | no | The lowest Jahia version the module runs on, for a version that states none. |
+| `dependencies` | no | The Jahia modules the module depends on, for a version that states none. |
 
-A repository that lacks a mandatory field, or whose `artifact` is not an absolute `http` or
-`https` URL, is refused at registration, and the error names the field.
+The `## Versions` section lists one version per list item: a link whose text is the version
+number and whose target is the folder of that version, relative to `STORE.md`. The section is
+not part of the description. A version number holds letters, digits, `.`, `_` and `-`, as a
+Maven version does. A module with no `## Versions` section has no version yet.
 
-### Versions are tags
+A repository that lacks `STORE.md` on the store branch, lacks a mandatory field, or names a
+version twice is refused at registration, and the error names the cause.
 
-Each tag of the repository that matches the version pattern is one version. The pattern is a
-property of the registration, and a store-level default applies when the registration names
-none. The default pattern accepts `1.2.3` and `v1.2.3`, and a pre-release tag such as
-`1.2.3-rc1` is not a version.
+### The folder of a version
 
-The version number is the tag without its `v` prefix. The store reads `STORE.md` as it stands
-at the tag, so the `artifact`, the `requiredVersion` and the `dependencies` of a version are the
-ones declared at that tag. The description, the title, the icon and the author of the module
-come from the root `STORE.md` on the default branch of the repository.
+The folder of a version holds everything the store reads of that version: its `VERSION.md`, and
+the images and other files that the release notes show.
 
-### `CHANGELOG.md`
+```markdown
+---
+artifact: https://github.com/example/my-module/releases/download/v1.2.0/my-module-1.2.0.jar
+date: 2026-03-04
+available: true
+requiredVersion: 8.2.1.0
+dependencies:
+  - default
+---
 
-The release notes of a version come from the `CHANGELOG.md` at the tag, in the
-[Keep a Changelog](https://keepachangelog.com/) layout: the section whose heading is
-`## [1.2.3]`, `## 1.2.3` or `## v1.2.3`, up to the next `##` heading. A version whose section
-is absent has no release notes.
+### Improvements
 
-### `store/` directory
+- Added the thing. ![The thing](thing.png)
+```
 
-A repository may hold a `store/` directory for the information that does not fit one file. It is
-reserved for the long description, the screenshots and the per-version files, and the store reads
-`store/index.md` in place of `STORE.md` when it exists. The layout of that directory is not fixed
-yet.
+| Field | Mandatory | Meaning |
+|---|---|---|
+| `artifact` | yes | The URL of the artefact of the version: absolute, `http` or `https`. The store never guesses it. |
+| `date` | no | The release date, `YYYY-MM-DD`. The date of the tip of the store branch otherwise. |
+| `available` | no | `false` withdraws the version: the store lists nothing of it. `true` by default. |
+| `requiredVersion` | no | The lowest Jahia version this version runs on. The value of `STORE.md` otherwise. |
+| `dependencies` | no | The Jahia modules this version depends on. The value of `STORE.md` otherwise. |
+
+The Markdown body of `VERSION.md` is the release notes of the version. When the body is empty and
+the folder holds a `CHANGELOG.md`, that file is the release notes. A relative link or image in
+the notes names a file of the folder, and the store serves that file beside the version.
+
+A version whose folder holds no `VERSION.md`, or whose `artifact` is absent or not an absolute
+`http` or `https` URL, is refused with the version number and the cause.
 
 ## The node mapping
 
@@ -82,17 +110,19 @@ The data source serves one module per registration. The root of the provider is 
 
 | Path in the provider | Node type | Source |
 |---|---|---|
-| `/` | `jnt:forgeModule` | The root `STORE.md`. |
-| `/<version>` | `jnt:forgeModuleVersion` | One per tag that matches the pattern. |
+| `/` | `jnt:forgeModule` | `STORE.md`. |
+| `/<version>` | `jnt:forgeModuleVersion` | One per available version of the `## Versions` section. |
+| `/<version>/<file>` | `jnt:file` | A file of the folder of the version, other than its Markdown files. |
 | `/icon` | `jnt:folder` | Always present. |
 | `/icon/<file>` | `jnt:file` | The file that the `icon` field names, when it names one. |
-| `/screenshots` | `jnt:forgeScreenshotsList` | Always present, empty. |
+| `/screenshots` | `jnt:forgeScreenshotsList` | Always present. |
+| `/screenshots/<file>` | `jnt:file` | One per file that the `screenshots` field names. |
 
 | Property of `jnt:forgeModule` | Source |
 |---|---|
 | `jcr:title` | `title` |
 | `groupId` | `groupId` |
-| `description` | The Markdown body of `STORE.md`, rendered to HTML. |
+| `description` | The Markdown body of `STORE.md` without its `## Versions` section, rendered to HTML. |
 | `license` | `license` |
 | `authorURL`, `authorEmail` | `authorUrl`, `authorEmail` |
 | `codeRepository` | The URL of the repository. |
@@ -102,20 +132,20 @@ The data source serves one module per registration. The root of the provider is 
 
 | Property of `jnt:forgeModuleVersion` | Source |
 |---|---|
-| `versionNumber` | The tag without its `v` prefix. |
-| `url` | The `artifact` of the `STORE.md` at the tag, with `{version}` replaced. |
-| `changeLog` | The section of `CHANGELOG.md` at the tag, rendered to HTML. |
-| `references` | The `dependencies` of the `STORE.md` at the tag. |
-| `uploadDate` | The date of the tag. |
+| `versionNumber` | The text of the link in the `## Versions` section. |
+| `url` | `artifact` of `VERSION.md`. |
+| `changeLog` | The release notes, rendered to HTML. A relative link points to the file served beside the version. |
+| `references` | `dependencies` of `VERSION.md`, or of `STORE.md`. |
+| `uploadDate` | `date` of `VERSION.md`, or the date of the tip of the store branch. |
 | `published` | `true`. |
 
-The i18n properties (`description`, `license`, `changeLog`) hold the same value in every
-language.
+The i18n properties (`description`, `license`) hold the same value in every language.
 
 The node identifiers are the paths inside the provider, so they are stable across restarts and
-refreshes. Jahia may attach local properties and access control to an external node of these
-types, which is where the store keeps what the repository does not hold: the owner, the categories
-and, later, the approval and the verification verdicts.
+refreshes. The provider is read-only and nothing overrides what the repository says: the store
+attaches no local property and no access control to a git-backed node. What the store will keep
+beside a git-backed module, such as the approval and the verification verdicts, lives in the
+registration.
 
 ## Registration
 
@@ -127,9 +157,11 @@ name is `<module name>-mount`, so the module is served at
 | Property | Meaning |
 |---|---|
 | `j:gitUrl` | The HTTP URL of the repository. |
-| `j:tagPattern` | The regular expression a tag must match to be a version. Optional. |
-| `j:branch` | The branch that holds the root `STORE.md`. Optional, the default branch of the repository otherwise. |
 | `j:registeredBy` | The user the module is registered for. The module and its versions read that user as `jcr:createdBy`, which is how the storefront lists a developer's own modules. |
+
+The definition also declares `j:tagPattern` and `j:branch`, which nothing reads or writes: an
+earlier contract read versions from tags and a branch per registration, and Jahia refuses to drop
+a property from a definition it has deployed.
 
 Two entry points create the node, and both read the repository first and refuse one that fails
 the contract, with the reason:
@@ -140,14 +172,46 @@ the contract, with the reason:
   because `/mounts` is not the developer's to write, and records the developer in
   `j:registeredBy`. A failure answers `{error}` with HTTP 200, as the upload action does.
 - An administrator calls the GraphQL mutation `forge { registerGitModule }`, which requires
-  the `siteAdminForgeSettings` permission on the site. `forge { unregisterGitModule }` and
-  `forge { refreshGitModule }` are administration mutations too, and the query
-  `forge { gitModules }` lists the registrations of a site.
+  the `siteAdminForgeSettings` permission on the site. `forge { unregisterGitModule }` is an
+  administration mutation too, and the query `forge { gitModules }` lists the registrations of
+  a site. `forge { refreshGitModule }` is open to the developer who registered the module as
+  well, as the next section states.
+
+## Refresh
+
+The store reads the repository once, when the module is first requested after the mount, and
+serves that reading until a refresh. Nothing refreshes it on its own: no interval, no webhook.
+
+A refresh reads the store branch again and replaces the reading as a whole, or keeps the previous
+reading and reports the cause when the repository cannot be read or fails the contract. Two
+entry points trigger one:
+
+- The developer who registered the module, or a store administrator, presses "Refresh" on the
+  page of the module in the storefront. The button calls the action
+  `<module>.refreshGitModule.do` over XMLHttpRequest, which carries the CSRF token of the page.
+  The action requires the `jahiaForgeUploadModule` permission, and refuses a caller who neither
+  registered the module nor holds `siteAdminForgeSettings` on the site. It answers
+  `{module, versions}` on success and `{error}` with HTTP 200 on a failure, as the registration
+  does.
+- A process outside the store, such as the release workflow of the repository, calls the GraphQL
+  mutation `forge { refreshGitModule }` with the credentials of the developer who registered the
+  module, or of an administrator. The CSRF guard of Jahia refuses an action called without the
+  token of a page, and GraphQL is outside that guard.
+
+  ```bash
+  curl --fail --user "$STORE_USER:$STORE_PASSWORD" \
+    --header "Origin: https://store.example.com" --header "Content-Type: application/json" \
+    --data '{"query":"mutation { forge { refreshGitModule(siteKey: \"store\", name: \"my-module\") } }"}' \
+    "https://store.example.com/modules/graphql"
+  ```
+
+  The mutation answers `true`, `false` when the module is not a git-backed module, and an error
+  that names the cause when the repository cannot be read.
 
 ## Downloads
 
 The storefront links a version of a git-backed module to the artefact URL its version node
-declares, the one `STORE.md` gives, so a visitor downloads from the repository's own host and
+declares, the one `VERSION.md` gives, so a visitor downloads from the repository's own host and
 nothing passes through the store. A version without a declared URL keeps the proxy link below.
 
 The catalogue JSON that Jahia servers read builds the download URL of every version from the
@@ -155,17 +219,17 @@ module coordinates, on the Maven proxy of the site:
 `/modules/mavenproxy/<siteKey>/<groupId as path>/<name>/<version>/<name>-<version>.jar`.
 
 The proxy resolves these coordinates to the version node of the site. When that node holds a
-`url`, the proxy streams the artefact from that URL without credentials. Otherwise it streams it
-from the Maven repository of the site, as before. A Jahia server therefore needs no change to
-install a git-backed module.
+`url` and an external provider serves the module, the proxy streams the artefact from that URL
+without credentials. Otherwise it streams it from the Maven repository of the site, as before. A
+Jahia server therefore needs no change to install a git-backed module.
 
-## The cache
+## The configuration and the cache
 
-The data source keeps a bare clone of the repository under the Jahia data directory, in
-`forge-git/<hash of the URL>`. A read of the module lists the remote tags, fetches the ones it has
-not seen and reads the files it needs from the clone. The list of tags is refreshed on demand, at
-most once per refresh interval, so a render never waits on the remote twice in a row. The mutation
-`forge { refreshGitModule }` forces the next read to refresh.
+The configuration of the module, `org.jahia.modules.forge.git.cfg`, names the store branch
+(`branch`, empty for the default branch of each repository) and the directory of the clones
+(`cacheDir`, under the Jahia data directory by default).
 
-The refresh interval and the default tag pattern are the configuration of the module, in
-`org.jahia.modules.forge.git.cfg`.
+The data source keeps a bare clone of the repository under that directory, in
+`<hash of the URL>`. A reading of the module fetches the tip of the store branch, shallow, and
+reads the files it needs from the clone. The reading stays in memory until a refresh; the clone
+only serves the next fetch.

@@ -35,18 +35,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The configuration of the git-backed modules, from {@code org.jahia.modules.forge.git.cfg}: where
- * the clones live, how often the tags are refreshed, and which tags are versions when a
- * registration names no pattern.
+ * The configuration of the git-backed modules, from {@code org.jahia.modules.forge.git.cfg}: the
+ * store branch of every repository, and where the clones live.
  */
 @Component(service = GitStoreSettings.class, immediate = true, configurationPid = GitStoreSettings.PID)
 public class GitStoreSettings {
 
     static final String PID = "org.jahia.modules.forge.git";
     static final String P_CACHE_DIR = "cacheDir";
-    static final String P_REFRESH_SECONDS = "refreshSeconds";
-    static final String P_TAG_PATTERN = "tagPattern";
-    static final long DEFAULT_REFRESH_SECONDS = 300;
+    static final String P_BRANCH = "branch";
     private static final String DEFAULT_CACHE_DIR_NAME = "forge-git";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GitStoreSettings.class);
@@ -54,13 +51,11 @@ public class GitStoreSettings {
     /** One immutable reading of the configuration, swapped as a whole on each update. */
     private static final class Values {
         private final File cacheDir;
-        private final long refreshMillis;
-        private final String tagPattern;
+        private final String branch;
 
-        private Values(File cacheDir, long refreshMillis, String tagPattern) {
+        private Values(File cacheDir, String branch) {
             this.cacheDir = cacheDir;
-            this.refreshMillis = refreshMillis;
-            this.tagPattern = tagPattern;
+            this.branch = branch;
         }
     }
 
@@ -79,34 +74,21 @@ public class GitStoreSettings {
     void apply(Map<String, Object> properties) {
         Values defaults = defaults();
         File cacheDir = defaults.cacheDir;
-        long refreshMillis = defaults.refreshMillis;
-        String tagPattern = defaults.tagPattern;
+        String branch = defaults.branch;
         if (properties != null) {
             String dir = str(properties.get(P_CACHE_DIR));
             if (dir != null) {
                 cacheDir = new File(dir);
             }
-            String seconds = str(properties.get(P_REFRESH_SECONDS));
-            if (seconds != null) {
-                try {
-                    refreshMillis = Math.max(0, Long.parseLong(seconds)) * 1000;
-                } catch (NumberFormatException e) {
-                    LOGGER.warn("Ignoring {}={} in {}: not a number of seconds", P_REFRESH_SECONDS, seconds, PID);
-                }
-            }
-            String pattern = str(properties.get(P_TAG_PATTERN));
-            if (pattern != null) {
-                VersionTags.compile(pattern);
-                tagPattern = pattern;
-            }
+            branch = str(properties.get(P_BRANCH));
         }
-        values.set(new Values(cacheDir, refreshMillis, tagPattern));
-        LOGGER.info("Git-backed modules: clones under {}, tags refreshed every {} s, version tags match {}",
-                cacheDir, refreshMillis / 1000, tagPattern);
+        values.set(new Values(cacheDir, branch));
+        LOGGER.info("Git-backed modules: clones under {}, store data read from {}", cacheDir,
+                branch == null ? "the default branch of each repository" : "the branch " + branch);
     }
 
     private static Values defaults() {
-        return new Values(new File(defaultDataDir(), DEFAULT_CACHE_DIR_NAME), DEFAULT_REFRESH_SECONDS * 1000, VersionTags.DEFAULT_PATTERN);
+        return new Values(new File(defaultDataDir(), DEFAULT_CACHE_DIR_NAME), null);
     }
 
     private static String defaultDataDir() {
@@ -123,13 +105,8 @@ public class GitStoreSettings {
         return values.get().cacheDir;
     }
 
-    /** How long a reading of the tags stays current, in milliseconds. */
-    public long getRefreshMillis() {
-        return values.get().refreshMillis;
-    }
-
-    /** The pattern a tag must match to be a version, for a registration that names none. */
-    public String getDefaultTagPattern() {
-        return values.get().tagPattern;
+    /** The branch the store data is read from, or null for the default branch of each repository. */
+    public String getBranch() {
+        return values.get().branch;
     }
 }

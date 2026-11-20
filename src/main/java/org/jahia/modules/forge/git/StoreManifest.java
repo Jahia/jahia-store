@@ -27,42 +27,62 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The store fields of a {@code STORE.md}, as docs/git-backed-modules.md states them, plus the
- * description that its Markdown body gives. Immutable; built by {@link StoreManifestParser}.
+ * The content of a {@code STORE.md}, as docs/git-backed-modules.md states it: the fields shared
+ * by every version, the description that its Markdown body gives, and the versions that its
+ * {@code ## Versions} section lists. Immutable; built by {@link StoreManifestParser}.
  */
 public final class StoreManifest {
 
-    /** The placeholder of {@link #getArtifact()} that the version number replaces. */
-    public static final String VERSION_PLACEHOLDER = "{version}";
+    /** One entry of the {@code ## Versions} section: the version number and its folder. */
+    public static final class VersionLink {
+        private final String number;
+        private final String folder;
+
+        VersionLink(String number, String folder) {
+            this.number = number;
+            this.folder = folder;
+        }
+
+        public String getNumber() {
+            return number;
+        }
+
+        /** The folder of the version, relative to the root of the repository, without a trailing slash. */
+        public String getFolder() {
+            return folder;
+        }
+    }
 
     private final String name;
     private final String groupId;
     private final String title;
-    private final String artifact;
     private final String license;
     private final String icon;
+    private final List<String> screenshots;
     private final String author;
     private final String authorUrl;
     private final String authorEmail;
     private final String requiredVersion;
     private final List<String> dependencies;
     private final String descriptionHtml;
+    private final List<VersionLink> versions;
 
-    StoreManifest(String name, String groupId, String title, String artifact, String license, String icon,
+    StoreManifest(String name, String groupId, String title, String license, String icon, List<String> screenshots,
                   String author, String authorUrl, String authorEmail, String requiredVersion,
-                  List<String> dependencies, String descriptionHtml) {
+                  List<String> dependencies, String descriptionHtml, List<VersionLink> versions) {
         this.name = name;
         this.groupId = groupId;
         this.title = title;
-        this.artifact = artifact;
         this.license = license;
         this.icon = icon;
+        this.screenshots = screenshots == null ? Collections.emptyList() : Collections.unmodifiableList(screenshots);
         this.author = author;
         this.authorUrl = authorUrl;
         this.authorEmail = authorEmail;
         this.requiredVersion = requiredVersion;
         this.dependencies = dependencies == null ? Collections.emptyList() : Collections.unmodifiableList(dependencies);
         this.descriptionHtml = descriptionHtml;
+        this.versions = versions == null ? Collections.emptyList() : Collections.unmodifiableList(versions);
     }
 
     public String getName() {
@@ -77,16 +97,6 @@ public final class StoreManifest {
         return title;
     }
 
-    /** The artefact URL template, with {@link #VERSION_PLACEHOLDER} where the version goes. */
-    public String getArtifact() {
-        return artifact;
-    }
-
-    /** The artefact URL of one version. */
-    public String artifactUrl(String version) {
-        return artifact.replace(VERSION_PLACEHOLDER, version);
-    }
-
     public String getLicense() {
         return license;
     }
@@ -94,6 +104,11 @@ public final class StoreManifest {
     /** The path of the icon inside the repository, or null. */
     public String getIcon() {
         return icon;
+    }
+
+    /** The paths of the screenshots inside the repository. */
+    public List<String> getScreenshots() {
+        return screenshots;
     }
 
     public String getAuthor() {
@@ -108,16 +123,23 @@ public final class StoreManifest {
         return authorEmail;
     }
 
+    /** The lowest Jahia version, for a version that states none; or null. */
     public String getRequiredVersion() {
         return requiredVersion;
     }
 
+    /** The dependencies, for a version that states none. */
     public List<String> getDependencies() {
         return dependencies;
     }
 
-    /** The Markdown body of the file rendered to HTML, never null. */
+    /** The Markdown body without its {@code ## Versions} section, rendered to HTML; never null. */
     public String getDescriptionHtml() {
         return descriptionHtml;
+    }
+
+    /** The versions of the {@code ## Versions} section, in the order of the file. */
+    public List<VersionLink> getVersions() {
+        return versions;
     }
 }

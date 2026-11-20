@@ -25,37 +25,18 @@ package org.jahia.modules.forge.git;
 
 import java.util.Comparator;
 import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 
-/**
- * Which tags of a repository are versions, and the version number of a tag. A pre-release tag
- * never matches the default pattern.
- */
-public final class VersionTags {
+/** What a version number of {@code STORE.md} may be, and how two of them order. */
+public final class VersionNumbers {
 
-    /** Accepts {@code 1.2.3} and {@code v1.2.3}, and no pre-release suffix. */
-    public static final String DEFAULT_PATTERN = "^v?\\d+\\.\\d+\\.\\d+$";
+    /** A Maven version: it starts with a digit and holds letters, digits, '.', '_' and '-'. */
+    private static final Pattern VERSION = Pattern.compile("^\\d[A-Za-z0-9._-]*$");
 
-    private VersionTags() {
+    private VersionNumbers() {
     }
 
-    /** Compile a pattern of a registration, or the default one when it is blank. */
-    public static Pattern compile(String pattern) {
-        String p = pattern == null || pattern.trim().isEmpty() ? DEFAULT_PATTERN : pattern.trim();
-        try {
-            return Pattern.compile(p);
-        } catch (PatternSyntaxException e) {
-            throw new StoreManifestException("The tag pattern is not a valid regular expression: " + p, e);
-        }
-    }
-
-    public static boolean isVersion(Pattern pattern, String tag) {
-        return tag != null && pattern.matcher(tag).matches();
-    }
-
-    /** The version number of a tag: the tag without its {@code v} prefix. */
-    public static String versionOf(String tag) {
-        return tag.startsWith("v") || tag.startsWith("V") ? tag.substring(1) : tag;
+    public static boolean isValid(String number) {
+        return number != null && VERSION.matcher(number).matches();
     }
 
     /** Newest version first, on the numeric segments, then on the text. */

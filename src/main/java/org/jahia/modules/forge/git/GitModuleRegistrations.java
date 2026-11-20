@@ -28,15 +28,17 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import javax.jcr.RepositoryException;
 import org.apache.commons.lang.StringUtils;
+import org.jahia.modules.external.ExternalContentStoreProvider;
 import org.jahia.services.content.JCRNodeWrapper;
 import org.jahia.services.content.JCRSessionWrapper;
+import org.jahia.services.content.JCRStoreProvider;
 import org.jahia.services.content.decorator.JCRMountPointNode;
 
 /**
  * The registration of a git-backed module, as docs/git-backed-modules.md states it: one mount
  * point node per repository under {@code /mounts}, served under the modules repository of the
- * site. The GraphQL API of the administration and the action of the storefront both go through
- * here, so a repository is read and refused the same way whoever registers it.
+ * site. The GraphQL API of the administration and the actions of the storefront all go through
+ * here, so a repository is read, refused and refreshed the same way whoever asks.
  */
 public final class GitModuleRegistrations {
 
@@ -69,13 +71,11 @@ public final class GitModuleRegistrations {
      * before anything is written.
      *
      * @throws IOException            when the remote cannot be read
-     * @throws StoreManifestException when the repository fails the contract, or the pattern is broken
+     * @throws StoreManifestException when the repository fails the contract
      */
-    public static GitModule read(GitStoreSettings settings, String url, String tagPattern, String branch) throws IOException {
-        VersionTags.compile(tagPattern);
+    public static GitModule read(GitStoreSettings settings, String url) throws IOException {
         try (GitRepositoryReader reader = new GitRepositoryReader(settings.getCacheDir(), url)) {
-            return GitModuleLoader.load(reader, branch,
-                    VersionTags.compile(StringUtils.defaultIfBlank(tagPattern, settings.getDefaultTagPattern())));
+            return GitModuleLoader.load(reader, settings.getBranch(), null);
         }
     }
 
@@ -95,16 +95,10 @@ public final class GitModuleRegistrations {
      *
      * @param registeredBy the user the module is registered for, who the module reads as its creator
      */
-    public static JCRNodeWrapper register(JCRSessionWrapper session, JCRNodeWrapper repository, String url, String tagPattern,
-                                          String branch, String registeredBy, String moduleName) throws RepositoryException {
+    public static JCRNodeWrapper register(JCRSessionWrapper session, JCRNodeWrapper repository, String url,
+                                          String registeredBy, String moduleName) throws RepositoryException {
         JCRNodeWrapper mount = session.getNode(MOUNTS_PATH).addNode(mountName(moduleName), GitStoreProviderFactory.NODE_TYPE);
         mount.setProperty(GitStoreProviderFactory.P_GIT_URL, url);
-        if (StringUtils.isNotBlank(tagPattern)) {
-            mount.setProperty(GitStoreProviderFactory.P_TAG_PATTERN, tagPattern.trim());
-        }
-        if (StringUtils.isNotBlank(branch)) {
-            mount.setProperty(GitStoreProviderFactory.P_BRANCH, branch.trim());
-        }
         if (StringUtils.isNotBlank(registeredBy)) {
             mount.setProperty(GitStoreProviderFactory.P_REGISTERED_BY, registeredBy);
         }
@@ -139,5 +133,24 @@ public final class GitModuleRegistrations {
         } catch (RepositoryException e) {
             return false;
         }
+    }
+
+    /** The user a mount point was registered for, or null. */
+    public static String registeredBy(JCRNodeWrapper mount) throws RepositoryException {
+        return mount.hasProperty(GitStoreProviderFactory.P_REGISTERED_BY)
+                ? StringUtils.trimToNull(mount.getProperty(GitStoreProviderFactory.P_REGISTERED_BY).getString()) : null;
+    }
+
+    /** The data source of a mounted registration, or null when the provider is not mounted. */
+    public static GitStoreDataSource dataSourceOf(JCRNodeWrapper mount) throws RepositoryException {
+        if (!(mount instanceof JCRMountPointNode)) {
+            return null;
+        }
+        JCRStoreProvider provider = ((JCRMountPointNode) mount).getMountProvider();
+        if (provider instanceof ExternalContentStoreProvider
+                && ((ExternalContentStoreProvider) provider).getDataSource() instanceof GitStoreDataSource) {
+            return (GitStoreDataSource) ((ExternalContentStoreProvider) provider).getDataSource();
+        }
+        return null;
     }
 }

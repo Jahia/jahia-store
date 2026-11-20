@@ -39,7 +39,6 @@ import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiPredicate;
-import java.util.regex.Pattern;
 import javax.jcr.Binary;
 import javax.jcr.ItemNotFoundException;
 import javax.jcr.PathNotFoundException;
@@ -59,9 +58,9 @@ import org.slf4j.LoggerFactory;
 
 /**
  * A read-only external data source that serves one git-backed module as the node tree that
- * docs/git-backed-modules.md maps: the module at the root, one version per tag, the icon folder
- * and an empty screenshots list. The repository is read on demand, through a snapshot that is
- * refreshed at most once per refresh interval, or when a refresh is requested.
+ * docs/git-backed-modules.md maps: the module at the root, one version per available version
+ * with its files, the icon folder and the screenshots list. The repository is read once, on the
+ * first request, and that reading is served until {@link #refresh()} replaces it.
  */
 public class GitStoreDataSource implements ExternalDataSource, ExternalDataSource.Initializable,
         ExternalDataSource.LazyProperty, ExternalDataSource.Searchable, ExternalDataSource.CanLoadChildrenInBatch,
@@ -80,43 +79,42 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
             TYPE_MODULE, TYPE_VERSION, TYPE_SCREENSHOTS, Constants.JAHIANT_FOLDER, Constants.JAHIANT_FILE, Constants.JAHIANT_RESOURCE)));
     private static final String[] TRUE = {"true"};
     private static final String[] FALSE = {"false"};
+    /** How long a failed first reading holds before a request tries the remote again. */
+    private static final long RETRY_MILLIS = 60_000;
 
     private final GitRepositoryReader reader;
     private final String branch;
-    private final Pattern tagPattern;
-    private final long refreshMillis;
     private final Set<String> languages;
     private final String mountPoint;
+    private final String filesBaseUrl;
     private final BiPredicate<String, String> isNodeType;
 
     private volatile String registeredBy;
 
     private final AtomicReference<GitModule> snapshot = new AtomicReference<>();
     private final Object loadLock = new Object();
-    private volatile long lastAttempt;
-    private volatile boolean refreshRequested;
+    private volatile long lastFailure;
 
     /**
-     * @param reader        the repository
-     * @param branch        the branch that holds the root manifest, or null for the default branch
-     * @param tagPattern    the pattern a tag must match to be a version
-     * @param refreshMillis how long a reading of the repository stays current
-     * @param languages     the languages of the site, which the i18n properties are served in
-     * @param mountPoint    the JCR path the provider is mounted at, which a query names
+     * @param reader       the repository
+     * @param branch       the store branch, or null for the default branch of the repository
+     * @param languages    the languages of the site, which the i18n properties are served in
+     * @param mountPoint   the JCR path the provider is mounted at, which a query names
+     * @param filesBaseUrl the URL under which the files of the module are served, without a
+     *                     trailing slash, which the relative links of the release notes resolve against
      */
-    public GitStoreDataSource(GitRepositoryReader reader, String branch, Pattern tagPattern, long refreshMillis,
-                              Set<String> languages, String mountPoint) {
-        this(reader, branch, tagPattern, refreshMillis, languages, mountPoint, GitStoreDataSource::registryIsNodeType);
+    public GitStoreDataSource(GitRepositoryReader reader, String branch, Set<String> languages, String mountPoint,
+                              String filesBaseUrl) {
+        this(reader, branch, languages, mountPoint, filesBaseUrl, GitStoreDataSource::registryIsNodeType);
     }
 
-    GitStoreDataSource(GitRepositoryReader reader, String branch, Pattern tagPattern, long refreshMillis,
-                       Set<String> languages, String mountPoint, BiPredicate<String, String> isNodeType) {
+    GitStoreDataSource(GitRepositoryReader reader, String branch, Set<String> languages, String mountPoint,
+                       String filesBaseUrl, BiPredicate<String, String> isNodeType) {
         this.reader = reader;
         this.branch = branch;
-        this.tagPattern = tagPattern;
-        this.refreshMillis = refreshMillis;
         this.languages = languages == null || languages.isEmpty() ? Collections.singleton("en") : new LinkedHashSet<>(languages);
         this.mountPoint = StringUtils.removeEnd(mountPoint, "/");
+        this.filesBaseUrl = filesBaseUrl == null ? null : StringUtils.removeEnd(filesBaseUrl, "/");
         this.isNodeType = isNodeType;
     }
 
@@ -136,35 +134,45 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
         this.registeredBy = StringUtils.trimToNull(registeredBy);
     }
 
-    /** Make the next read refresh the module from the repository. */
-    public void requestRefresh() {
-        refreshRequested = true;
+    /**
+     * Read the repository again and serve that reading from now on. A reading that fails leaves
+     * the previous one in place.
+     *
+     * @return the new reading
+     * @throws IOException            when the remote cannot be read
+     * @throws StoreManifestException when the repository fails the contract
+     */
+    public GitModule refresh() throws IOException {
+        synchronized (loadLock) {
+            try {
+                GitModule loaded = GitModuleLoader.load(reader, branch, filesBaseUrl);
+                snapshot.set(loaded);
+                lastFailure = 0;
+                return loaded;
+            } catch (IOException | StoreManifestException e) {
+                lastFailure = System.currentTimeMillis();
+                throw e;
+            }
+        }
     }
 
-    /** The current reading of the module, refreshed when it is stale. */
+    /** The current reading of the module, read on the first request. */
     GitModule module() throws RepositoryException {
         GitModule current = snapshot.get();
-        long now = System.currentTimeMillis();
-        if (current != null && !refreshRequested && now - lastAttempt < refreshMillis) {
+        if (current != null) {
             return current;
         }
         synchronized (loadLock) {
             current = snapshot.get();
-            now = System.currentTimeMillis();
-            if (current != null && !refreshRequested && now - lastAttempt < refreshMillis) {
+            if (current != null) {
                 return current;
             }
-            lastAttempt = now;
+            if (System.currentTimeMillis() - lastFailure < RETRY_MILLIS) {
+                throw new RepositoryException("The module of " + reader.getUrl() + " could not be read; retrying later");
+            }
             try {
-                GitModule loaded = GitModuleLoader.load(reader, branch, tagPattern);
-                snapshot.set(loaded);
-                refreshRequested = false;
-                return loaded;
+                return refresh();
             } catch (IOException | StoreManifestException e) {
-                if (current != null) {
-                    LOGGER.warn("Keeping the previous reading of {}: {}", reader.getUrl(), e.getMessage());
-                    return current;
-                }
                 throw new RepositoryException("Cannot read the module of " + reader.getUrl() + ": " + e.getMessage(), e);
             }
         }
@@ -237,10 +245,21 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
             for (GitModule.Version version : module.getVersions()) {
                 children.add(versionData(module, version));
             }
-        } else if (("/" + NODE_ICON).equals(path) && module.getIconName() != null) {
-            children.add(iconFile(module));
-        } else if (("/" + NODE_ICON + "/" + module.getIconName()).equals(path) && module.getIconName() != null) {
-            children.add(iconContent(module));
+            return children;
+        }
+        String[] segments = path.substring(1).split("/");
+        if (segments.length == 1) {
+            // A folder: its files.
+            String folderPath = "/" + segments[0];
+            for (GitFile file : filesOf(module, segments[0])) {
+                children.add(fileData(module, folderPath, file));
+            }
+        } else if (segments.length == 2) {
+            // A file: its content node.
+            GitFile file = fileOf(module, segments[0], segments[1]);
+            if (file != null) {
+                children.add(fileContent(module, "/" + segments[0], file));
+            }
         }
         return children;
     }
@@ -249,29 +268,44 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
         if (path == null || path.isEmpty() || ROOT.equals(path)) {
             return moduleData(module);
         }
-        String relative = path.substring(1);
-        if (NODE_ICON.equals(relative)) {
-            return folder(NODE_ICON, Constants.JAHIANT_FOLDER);
-        }
-        if (NODE_SCREENSHOTS.equals(relative)) {
-            return folder(NODE_SCREENSHOTS, TYPE_SCREENSHOTS);
-        }
-        if (module.getIconName() != null) {
-            String iconPath = NODE_ICON + "/" + module.getIconName();
-            if (iconPath.equals(relative)) {
-                return iconFile(module);
+        String[] segments = path.substring(1).split("/");
+        if (segments.length == 1) {
+            if (NODE_ICON.equals(segments[0])) {
+                return folder(NODE_ICON, Constants.JAHIANT_FOLDER);
             }
-            if ((iconPath + "/" + Constants.JCR_CONTENT).equals(relative)) {
-                return iconContent(module);
+            if (NODE_SCREENSHOTS.equals(segments[0])) {
+                return folder(NODE_SCREENSHOTS, TYPE_SCREENSHOTS);
             }
+            GitModule.Version version = module.version(segments[0]);
+            return version == null ? null : versionData(module, version);
         }
-        if (!relative.contains("/")) {
-            GitModule.Version version = module.version(relative);
-            if (version != null) {
-                return versionData(module, version);
-            }
+        GitFile file = fileOf(module, segments[0], segments[1]);
+        if (file == null) {
+            return null;
+        }
+        if (segments.length == 2) {
+            return fileData(module, "/" + segments[0], file);
+        }
+        if (segments.length == 3 && Constants.JCR_CONTENT.equals(segments[2])) {
+            return fileContent(module, "/" + segments[0], file);
         }
         return null;
+    }
+
+    /** The files served under a folder of the provider: the icon folder, the screenshots list or a version. */
+    private static List<GitFile> filesOf(GitModule module, String folder) {
+        if (NODE_ICON.equals(folder)) {
+            return module.getIcon() == null ? Collections.emptyList() : Collections.singletonList(module.getIcon());
+        }
+        if (NODE_SCREENSHOTS.equals(folder)) {
+            return module.getScreenshots();
+        }
+        GitModule.Version version = module.version(folder);
+        return version == null ? Collections.emptyList() : version.getFiles();
+    }
+
+    private static GitFile fileOf(GitModule module, String folder, String name) {
+        return GitModule.file(filesOf(module, folder), name);
     }
 
     // --- The nodes ------------------------------------------------------------------------------
@@ -311,7 +345,7 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
         properties.put("versionNumber", single(version.getNumber()));
         properties.put("url", single(version.getArtifactUrl()));
         properties.put("published", TRUE);
-        putIfPresent(properties, "changeLog", version.getChangelogHtml());
+        putIfPresent(properties, "changeLog", version.getNotesHtml());
         if (!version.getDependencies().isEmpty()) {
             properties.put("references", version.getDependencies().toArray(new String[0]));
         }
@@ -336,26 +370,28 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
         return new ExternalData(path, path, type, new HashMap<>());
     }
 
-    private ExternalData iconFile(GitModule module) {
-        String path = "/" + NODE_ICON + "/" + module.getIconName();
+    private ExternalData fileData(GitModule module, String folderPath, GitFile file) {
+        String path = folderPath + "/" + file.getName();
         Map<String, String[]> properties = new HashMap<>();
         String date = iso(module.getReadAt());
         properties.put(Constants.JCR_CREATED, single(date));
         properties.put(Constants.JCR_LASTMODIFIED, single(date));
+        putCreator(properties);
         ExternalData data = new ExternalData(path, path, Constants.JAHIANT_FILE, properties);
-        if (module.getIconMimeType() != null && module.getIconMimeType().startsWith("image/")) {
+        if (file.isImage()) {
             data.setMixin(Collections.singletonList(Constants.JAHIAMIX_IMAGE));
         }
         return data;
     }
 
-    private ExternalData iconContent(GitModule module) {
-        String path = "/" + NODE_ICON + "/" + module.getIconName() + "/" + Constants.JCR_CONTENT;
+    private ExternalData fileContent(GitModule module, String folderPath, GitFile file) {
+        String path = folderPath + "/" + file.getName() + "/" + Constants.JCR_CONTENT;
         Map<String, String[]> properties = new HashMap<>();
-        properties.put(Constants.JCR_MIMETYPE, single(module.getIconMimeType()));
+        properties.put(Constants.JCR_MIMETYPE, single(file.getMimeType()));
+        properties.put(Constants.JCR_LASTMODIFIED, single(iso(module.getReadAt())));
         ExternalData data = new ExternalData(path, path, Constants.JAHIANT_RESOURCE, properties);
         Map<String, Binary[]> binaries = new HashMap<>();
-        binaries.put(Constants.JCR_DATA, new Binary[]{new BytesBinary(module.getIconBytes())});
+        binaries.put(Constants.JCR_DATA, new Binary[]{new BytesBinary(file.getBytes())});
         data.setBinaryProperties(binaries);
         return data;
     }
@@ -490,9 +526,9 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
     private List<ExternalData> allNodes(GitModule module) throws RepositoryException {
         List<ExternalData> nodes = new ArrayList<>();
         nodes.add(moduleData(module));
-        nodes.addAll(getChildrenNodes(ROOT));
-        if (module.getIconName() != null) {
-            nodes.add(iconFile(module));
+        for (ExternalData child : getChildrenNodes(ROOT)) {
+            nodes.add(child);
+            nodes.addAll(getChildrenNodes(child.getPath()));
         }
         return nodes;
     }

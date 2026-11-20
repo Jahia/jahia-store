@@ -28,47 +28,51 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * What the store knows of a git-backed module at one point in time: the root manifest, the
- * versions read from the tags, and the icon. Immutable, so a read never sees a half refresh.
+ * What the store knows of a git-backed module at one point in time: the manifest, the available
+ * versions with their files, the icon and the screenshots. Immutable, so a read never sees a
+ * half refresh.
  */
 public final class GitModule {
 
-    /** One version: the tag, the manifest at the tag and the release notes at the tag. */
+    /** One available version: its manifest, its release notes rendered, and the files of its folder. */
     public static final class Version {
-        private final String tag;
         private final String number;
+        private final String folder;
         private final String artifactUrl;
-        private final String changelogHtml;
+        private final String notesHtml;
         private final String requiredVersion;
         private final List<String> dependencies;
         private final Instant date;
+        private final List<GitFile> files;
 
-        Version(String tag, String number, String artifactUrl, String changelogHtml, String requiredVersion,
-                List<String> dependencies, Instant date) {
-            this.tag = tag;
+        Version(String number, String folder, String artifactUrl, String notesHtml, String requiredVersion,
+                List<String> dependencies, Instant date, List<GitFile> files) {
             this.number = number;
+            this.folder = folder;
             this.artifactUrl = artifactUrl;
-            this.changelogHtml = changelogHtml;
+            this.notesHtml = notesHtml;
             this.requiredVersion = requiredVersion;
             this.dependencies = dependencies == null ? Collections.emptyList() : Collections.unmodifiableList(dependencies);
             this.date = date;
-        }
-
-        public String getTag() {
-            return tag;
+            this.files = files == null ? Collections.emptyList() : Collections.unmodifiableList(files);
         }
 
         public String getNumber() {
             return number;
         }
 
+        /** The folder of the version inside the repository. */
+        public String getFolder() {
+            return folder;
+        }
+
         public String getArtifactUrl() {
             return artifactUrl;
         }
 
-        /** The release notes as HTML, or null. */
-        public String getChangelogHtml() {
-            return changelogHtml;
+        /** The release notes as HTML, or null when the version has none. */
+        public String getNotesHtml() {
+            return notesHtml;
         }
 
         public String getRequiredVersion() {
@@ -82,33 +86,50 @@ public final class GitModule {
         public Instant getDate() {
             return date;
         }
+
+        /** The files of the folder served beside the version, other than its Markdown files. */
+        public List<GitFile> getFiles() {
+            return files;
+        }
+
+        public GitFile file(String name) {
+            return GitModule.file(files, name);
+        }
     }
 
     private final String repositoryUrl;
     private final String branch;
     private final StoreManifest manifest;
     private final List<Version> versions;
-    private final String iconName;
-    private final String iconMimeType;
-    private final byte[] iconBytes;
+    private final GitFile icon;
+    private final List<GitFile> screenshots;
     private final Instant readAt;
 
     GitModule(String repositoryUrl, String branch, StoreManifest manifest, List<Version> versions,
-              String iconName, String iconMimeType, byte[] iconBytes) {
+              GitFile icon, List<GitFile> screenshots) {
         this.repositoryUrl = repositoryUrl;
         this.branch = branch;
         this.manifest = manifest;
         this.versions = Collections.unmodifiableList(versions);
-        this.iconName = iconName;
-        this.iconMimeType = iconMimeType;
-        this.iconBytes = iconBytes;
+        this.icon = icon;
+        this.screenshots = screenshots == null ? Collections.emptyList() : Collections.unmodifiableList(screenshots);
         this.readAt = Instant.now();
+    }
+
+    static GitFile file(List<GitFile> files, String name) {
+        for (GitFile file : files) {
+            if (file.getName().equals(name)) {
+                return file;
+            }
+        }
+        return null;
     }
 
     public String getRepositoryUrl() {
         return repositoryUrl;
     }
 
+    /** The store branch the module was read from. */
     public String getBranch() {
         return branch;
     }
@@ -117,7 +138,7 @@ public final class GitModule {
         return manifest;
     }
 
-    /** Newest first. */
+    /** The available versions, newest first. */
     public List<Version> getVersions() {
         return versions;
     }
@@ -131,17 +152,18 @@ public final class GitModule {
         return null;
     }
 
-    /** The file name of the icon, or null when the repository declares none or lacks the file. */
-    public String getIconName() {
-        return iconName;
+    /** The icon, or null when the repository declares none or lacks the file. */
+    public GitFile getIcon() {
+        return icon;
     }
 
-    public String getIconMimeType() {
-        return iconMimeType;
+    /** The screenshots the repository declares and holds. */
+    public List<GitFile> getScreenshots() {
+        return screenshots;
     }
 
-    public byte[] getIconBytes() {
-        return iconBytes;
+    public GitFile screenshot(String name) {
+        return file(screenshots, name);
     }
 
     public Instant getReadAt() {

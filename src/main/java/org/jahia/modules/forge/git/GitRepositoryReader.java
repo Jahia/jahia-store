@@ -31,7 +31,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -54,12 +53,11 @@ import org.slf4j.LoggerFactory;
 /**
  * Reads one remote git repository through a bare clone kept under the cache directory. The
  * clone is the store's own: nothing is ever pushed. Every fetch is shallow, so the clone holds
- * the tip of each ref it was asked for and nothing else.
+ * the tip of the branch it was asked for and nothing else.
  */
 public class GitRepositoryReader implements Closeable {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GitRepositoryReader.class);
-    private static final String TAGS_PREFIX = Constants.R_TAGS;
     private static final String HEADS_PREFIX = Constants.R_HEADS;
     private static final String REMOTE_PREFIX = Constants.R_REMOTES + "origin/";
 
@@ -102,30 +100,12 @@ public class GitRepositoryReader implements Closeable {
         return url;
     }
 
-    /** The names of the tags of the remote, without the {@code refs/tags/} prefix. */
-    public List<String> listRemoteTags() throws IOException {
-        List<String> tags = new ArrayList<>();
-        // Listed through the clone: the dumb HTTP transport walks objects and needs a local store.
-        try (Git git = new Git(repository)) {
-            Collection<Ref> refs = git.lsRemote().setRemote(url).setTags(true).setHeads(false).call();
-            for (Ref ref : refs) {
-                String name = ref.getName();
-                if (name.startsWith(TAGS_PREFIX) && !name.endsWith("^{}")) {
-                    tags.add(name.substring(TAGS_PREFIX.length()));
-                }
-            }
-        } catch (GitAPIException e) {
-            throw new IOException("Cannot list the tags of " + url + ": " + e.getMessage(), e);
-        }
-        Collections.sort(tags);
-        return tags;
-    }
-
     /**
      * The name of the default branch of the remote: the branch {@code HEAD} points to, or
      * {@code main} then {@code master} when the remote does not say.
      */
     public String defaultBranch() throws IOException {
+        // Listed through the clone: the dumb HTTP transport walks objects and needs a local store.
         try (Git git = new Git(repository)) {
             Map<String, Ref> refs = git.lsRemote().setRemote(url).setHeads(true).setTags(false).callAsMap();
             Ref head = refs.get(Constants.HEAD);
@@ -155,20 +135,7 @@ public class GitRepositoryReader implements Closeable {
     /** Fetch the tip of a branch into the clone, and return the local ref that holds it. */
     public String fetchBranch(String branch) throws IOException {
         String local = REMOTE_PREFIX + branch;
-        fetch(new RefSpec("+" + HEADS_PREFIX + branch + ":" + local));
-        return local;
-    }
-
-    /** Fetch a tag into the clone when the clone lacks it, and return the local ref that holds it. */
-    public String fetchTag(String tag) throws IOException {
-        String local = TAGS_PREFIX + tag;
-        if (repository.exactRef(local) == null) {
-            fetch(new RefSpec("+" + local + ":" + local));
-        }
-        return local;
-    }
-
-    private void fetch(RefSpec spec) throws IOException {
+        RefSpec spec = new RefSpec("+" + HEADS_PREFIX + branch + ":" + local);
         try (Git git = new Git(repository)) {
             try {
                 git.fetch().setRemote(url).setRefSpecs(spec).setTagOpt(TagOpt.NO_TAGS).setDepth(1).call();
@@ -178,10 +145,14 @@ public class GitRepositoryReader implements Closeable {
                 try {
                     git.fetch().setRemote(url).setRefSpecs(spec).setTagOpt(TagOpt.NO_TAGS).call();
                 } catch (GitAPIException e) {
-                    throw new IOException("Cannot fetch " + spec + " from " + url + ": " + e.getMessage(), e);
+                    throw new IOException("Cannot fetch the branch " + branch + " from " + url + ": " + e.getMessage(), e);
                 }
             }
         }
+        if (repository.exactRef(local) == null) {
+            throw new IOException("The repository " + url + " has no branch " + branch);
+        }
+        return local;
     }
 
     /** The content of a file at a local ref, or null when the ref holds no such file. */
@@ -189,13 +160,37 @@ public class GitRepositoryReader implements Closeable {
         try (RevWalk walk = new RevWalk(repository)) {
             RevCommit commit = commitOf(walk, ref);
             try (TreeWalk tree = TreeWalk.forPath(repository, path, commit.getTree())) {
-                if (tree == null) {
+                if (tree == null || tree.isSubtree()) {
                     return null;
                 }
                 ObjectLoader loader = repository.open(tree.getObjectId(0));
                 return loader.getBytes();
             }
         }
+    }
+
+    /** The names of the files directly in a folder at a local ref, sorted; empty when the folder is absent. */
+    public List<String> listFiles(String ref, String folder) throws IOException {
+        List<String> names = new ArrayList<>();
+        try (RevWalk walk = new RevWalk(repository)) {
+            RevCommit commit = commitOf(walk, ref);
+            try (TreeWalk dir = TreeWalk.forPath(repository, folder, commit.getTree())) {
+                if (dir == null || !dir.isSubtree()) {
+                    return names;
+                }
+                try (TreeWalk tree = new TreeWalk(repository)) {
+                    tree.addTree(dir.getObjectId(0));
+                    tree.setRecursive(false);
+                    while (tree.next()) {
+                        if (!tree.isSubtree()) {
+                            names.add(tree.getNameString());
+                        }
+                    }
+                }
+            }
+        }
+        Collections.sort(names);
+        return names;
     }
 
     /** The date of the commit a local ref points to. */
