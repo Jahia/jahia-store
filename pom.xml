@@ -157,6 +157,13 @@
             <version>0.29.0</version>
             <scope>compile</scope>
         </dependency>
+        <!-- A bare URL in the release notes of a repository becomes a link. -->
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark-ext-autolink</artifactId>
+            <version>0.29.0</version>
+            <scope>compile</scope>
+        </dependency>
         <!-- Unit tests for the pure security/validation logic (no Jahia container needed). -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>

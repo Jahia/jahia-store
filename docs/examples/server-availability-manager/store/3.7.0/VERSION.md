@@ -1,6 +1,8 @@
 ---
 artifact: https://devtools.jahia.com/nexus/content/repositories/jahia-releases/org/jahia/modules/server-availability-manager/3.7.0/server-availability-manager-3.7.0.jar
 date: 2026-11-16
+tag: 3_7_0
+changelog: https://github.com/Jahia/server-availability-manager/compare/3_6_0...3_7_0
 disabled: true
 requiredVersion: 8.2.0.0
 dependencies:
@@ -20,5 +22,3 @@ dependencies:
 ### Misc
 
 - Added maven.jahia.com to the Maven repositories used to download the module's dependencies. by @rknj in https://github.com/Jahia/server-availability-manager/pull/271
-
-**Full Changelog**: https://github.com/Jahia/server-availability-manager/compare/3_6_0...3_7_0

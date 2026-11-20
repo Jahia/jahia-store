@@ -1,6 +1,7 @@
 ---
 artifact: https://devtools.jahia.com/nexus/content/repositories/jahia-releases/org/jahia/modules/server-availability-manager/2.8.0/server-availability-manager-2.8.0.jar
 date: 2024-07-05
+tag: 2_8_0
 requiredVersion: 8.1.5.1
 dependencies:
   - graphql-dxm-provider

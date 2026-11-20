@@ -40,18 +40,24 @@ public final class GitModule {
         private final String folder;
         private final String artifactUrl;
         private final boolean disabled;
+        private final String tag;
+        private final String tagUrl;
+        private final String changelogUrl;
         private final String notesHtml;
         private final String requiredVersion;
         private final List<String> dependencies;
         private final Instant date;
         private final List<GitFile> files;
 
-        Version(String number, String folder, String artifactUrl, boolean disabled, String notesHtml, String requiredVersion,
-                List<String> dependencies, Instant date, List<GitFile> files) {
+        Version(String number, String folder, String artifactUrl, boolean disabled, String tag, String tagUrl, String changelogUrl,
+                String notesHtml, String requiredVersion, List<String> dependencies, Instant date, List<GitFile> files) {
             this.number = number;
             this.folder = folder;
             this.artifactUrl = artifactUrl;
             this.disabled = disabled;
+            this.tag = tag;
+            this.tagUrl = tagUrl;
+            this.changelogUrl = changelogUrl;
             this.notesHtml = notesHtml;
             this.requiredVersion = requiredVersion;
             this.dependencies = dependencies == null ? Collections.emptyList() : Collections.unmodifiableList(dependencies);
@@ -75,6 +81,21 @@ public final class GitModule {
         /** True when the version file disables the version: served unpublished, for the editors of the module only. */
         public boolean isDisabled() {
             return disabled;
+        }
+
+        /** The git tag of the version, or null. */
+        public String getTag() {
+            return tag;
+        }
+
+        /** The page of the tag on the git host, or null. */
+        public String getTagUrl() {
+            return tagUrl;
+        }
+
+        /** The page of the changelog of the version on the git host, or null. */
+        public String getChangelogUrl() {
+            return changelogUrl;
         }
 
         /** The release notes as HTML, or null when the version has none. */

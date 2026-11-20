@@ -35,6 +35,8 @@ class VersionManifestTest {
     private static final String VALID = "---\n"
             + "artifact: https://example.com/releases/{version}/my-module-{version}.jar\n"
             + "date: 2026-03-04\n"
+            + "tag: v1.2.0\n"
+            + "changelog: https://example.com/changes/1.2.0\n"
             + "requiredVersion: 8.2.1.0\n"
             + "dependencies: default, search\n"
             + "---\n"
@@ -50,6 +52,11 @@ class VersionManifestTest {
         assertThat(version.getArtifactUrl()).isEqualTo("https://example.com/releases/1.2.0/my-module-1.2.0.jar");
         assertThat(version.getDate()).isEqualTo(Instant.parse("2026-03-04T00:00:00Z"));
         assertThat(version.isDisabled()).isFalse();
+        assertThat(version.getTag()).isEqualTo("v1.2.0");
+        assertThat(version.getTagUrl()).isNull();
+        assertThat(version.getChangelogUrl()).isEqualTo("https://example.com/changes/1.2.0");
+        assertThatThrownBy(() -> VersionManifest.parse("1.2.0", VALID.replace("https://example.com/changes/1.2.0", "changes.md")))
+                .hasMessageContaining("'changelog'");
         assertThat(version.getRequiredVersion()).isEqualTo("8.2.1.0");
         assertThat(version.getDependencies()).containsExactly("default", "search");
         assertThat(version.getNotesMarkdown()).contains("Added the thing");

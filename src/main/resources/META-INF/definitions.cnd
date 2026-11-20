@@ -107,6 +107,11 @@
  - url (string)
  - references (string) multiple
  - uploadDate (date) hidden
+ // The git tag of the version and the pages of the tag and of the changelog on the git host,
+ // which a git-backed module reads from its repository (docs/git-backed-modules.md).
+ - tag (string) indexed=no
+ - tagUrl (string) indexed=no
+ - changelogUrl (string) indexed=no
  + * (jnt:file)
 
 [jnt:forgePackageVersion] > jnt:content, jmix:editorialContent, jmix:forge

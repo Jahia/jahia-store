@@ -106,7 +106,7 @@ class GitStoreDataSourceTest {
             write(work, "store/1.0.0/VERSION.md", version("https://example.com/old/1.0.0.jar", "2025-01-02", null, false, ""));
             write(work, "store/1.0.0/CHANGELOG.md", "- first\n");
             write(work, "store/1.1.0/VERSION.md", version("https://example.com/new/{version}.jar", "2026-03-04", "8.2.1.0", false,
-                    "- second ![shot](shot-1.1.0.png)\n"));
+                    "- second ![shot](shot-1.1.0.png)\n").replaceFirst("---\n", "---\ntag: v1.1.0\ntagUrl: https://example.com/tags/v1.1.0\n"));
             Files.write(work.resolve("store/1.1.0/shot-1.1.0.png"), new byte[]{(byte) 0x89, 'P', 'N', 'G', 2});
             write(work, "store/0.9.0/VERSION.md", version("https://example.com/old/0.9.0.jar", "2024-01-02", null, true, "- disabled\n"));
             git.add().addFilepattern(".").call();
@@ -176,6 +176,10 @@ class GitStoreDataSourceTest {
         assertThat(recent.getProperties().get("changeLog")[0]).contains("second")
                 .contains("src=\"/files/live/sites/store/contents/modules-repository/sample/1.1.0/shot-1.1.0.png\"");
         assertThat(recent.getProperties().get("uploadDate")[0]).startsWith("2026-03-04");
+        assertThat(recent.getProperties().get("tag")).containsExactly("v1.1.0");
+        assertThat(recent.getProperties().get("tagUrl")).containsExactly("https://example.com/tags/v1.1.0");
+        assertThat(recent.getProperties()).as("the host of a file URL is not known").doesNotContainKey("changelogUrl");
+        assertThat(old.getProperties()).doesNotContainKey("tag");
     }
 
     @Test

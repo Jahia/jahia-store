@@ -24,9 +24,12 @@
 package org.jahia.modules.forge.git;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.apache.commons.lang.StringUtils;
+import org.commonmark.Extension;
+import org.commonmark.ext.autolink.AutolinkExtension;
 import org.commonmark.node.AbstractVisitor;
 import org.commonmark.node.Image;
 import org.commonmark.node.Link;
@@ -43,8 +46,10 @@ import org.commonmark.renderer.html.HtmlRenderer;
  */
 final class Markdown {
 
-    private static final Parser PARSER = Parser.builder().build();
-    private static final HtmlRenderer RENDERER = HtmlRenderer.builder().escapeHtml(true).build();
+    /** A bare URL in the text, such as the compare link of a GitHub release, is a link. */
+    private static final List<Extension> EXTENSIONS = Collections.singletonList(AutolinkExtension.create());
+    private static final Parser PARSER = Parser.builder().extensions(EXTENSIONS).build();
+    private static final HtmlRenderer RENDERER = HtmlRenderer.builder().extensions(EXTENSIONS).escapeHtml(true).build();
 
     private Markdown() {
     }
@@ -64,7 +69,8 @@ final class Markdown {
         }
         Node document = PARSER.parse(markdown);
         HtmlRenderer renderer = baseUrl == null ? RENDERER
-                : HtmlRenderer.builder().escapeHtml(true).attributeProviderFactory(context -> new RelativeLinks(baseUrl)).build();
+                : HtmlRenderer.builder().extensions(EXTENSIONS).escapeHtml(true)
+                        .attributeProviderFactory(context -> new RelativeLinks(baseUrl)).build();
         return renderer.render(document).trim();
     }
 

@@ -79,11 +79,17 @@ public final class GitModuleLoader {
         String descriptionHtml = Markdown.toHtml(manifest.getDescriptionMarkdown(),
                 filesBaseUrl == null ? null : filesBaseUrl + "/" + FILES_FOLDER + "/");
 
-        List<GitModule.Version> versions = new ArrayList<>();
+        List<ReadVersion> read = new ArrayList<>();
         for (StoreManifest.VersionLink link : manifest.getVersions()) {
-            versions.add(readVersion(reader, ref, manifest, link, tipDate, filesBaseUrl));
+            read.add(readVersion(reader, ref, link, filesBaseUrl));
         }
-        versions.sort((a, b) -> VersionNumbers.newestFirst().compare(a.getNumber(), b.getNumber()));
+        read.sort((a, b) -> VersionNumbers.newestFirst().compare(a.link.getNumber(), b.link.getNumber()));
+        List<GitModule.Version> versions = new ArrayList<>();
+        for (int i = 0; i < read.size(); i++) {
+            // The changelog of a version on GitHub is its changes since the version before it.
+            String previousTag = i + 1 < read.size() ? read.get(i + 1).manifest.getTag() : null;
+            versions.add(read.get(i).toVersion(reader.getUrl(), manifest, tipDate, previousTag));
+        }
 
         GitFile icon = manifest.getIcon() == null ? null : readDeclaredFile(reader, ref, manifest.getIcon(), "icon");
         List<GitFile> screenshots = new ArrayList<>();
@@ -96,8 +102,33 @@ public final class GitModuleLoader {
         return new GitModule(reader.getUrl(), branchName, manifest, descriptionHtml, files, versions, icon, screenshots);
     }
 
-    private static GitModule.Version readVersion(GitRepositoryReader reader, String ref, StoreManifest manifest,
-                                                 StoreManifest.VersionLink link, Instant tipDate, String filesBaseUrl)
+    /** The folder of a version as read: its manifest, its notes rendered and its files. */
+    private static final class ReadVersion {
+        private final StoreManifest.VersionLink link;
+        private final VersionManifest manifest;
+        private final String notesHtml;
+        private final List<GitFile> files;
+
+        private ReadVersion(StoreManifest.VersionLink link, VersionManifest manifest, String notesHtml, List<GitFile> files) {
+            this.link = link;
+            this.manifest = manifest;
+            this.notesHtml = notesHtml;
+            this.files = files;
+        }
+
+        private GitModule.Version toVersion(String repositoryUrl, StoreManifest module, Instant tipDate, String previousTag) {
+            String tagUrl = manifest.getTagUrl() != null ? manifest.getTagUrl() : GitHosting.tagUrl(repositoryUrl, manifest.getTag());
+            String changelogUrl = manifest.getChangelogUrl() != null ? manifest.getChangelogUrl()
+                    : GitHosting.compareUrl(repositoryUrl, previousTag, manifest.getTag());
+            return new GitModule.Version(link.getNumber(), link.getFolder(), manifest.getArtifactUrl(), manifest.isDisabled(),
+                    manifest.getTag(), tagUrl, changelogUrl, notesHtml,
+                    StringUtils.defaultIfBlank(manifest.getRequiredVersion(), module.getRequiredVersion()),
+                    manifest.getDependencies().isEmpty() ? module.getDependencies() : manifest.getDependencies(),
+                    manifest.getDate() == null ? tipDate : manifest.getDate(), files);
+        }
+    }
+
+    private static ReadVersion readVersion(GitRepositoryReader reader, String ref, StoreManifest.VersionLink link, String filesBaseUrl)
             throws IOException {
         String folder = link.getFolder();
         byte[] content = reader.readFile(ref, folder + "/" + VERSION_MD);
@@ -119,10 +150,7 @@ public final class GitModuleLoader {
                 files.add(new GitFile(name, reader.readFile(ref, folder + "/" + name)));
             }
         }
-        return new GitModule.Version(link.getNumber(), folder, version.getArtifactUrl(), version.isDisabled(), notesHtml,
-                StringUtils.defaultIfBlank(version.getRequiredVersion(), manifest.getRequiredVersion()),
-                version.getDependencies().isEmpty() ? manifest.getDependencies() : version.getDependencies(),
-                version.getDate() == null ? tipDate : version.getDate(), files);
+        return new ReadVersion(link, version, notesHtml, files);
     }
 
     /** A file that {@code STORE.md} names, or null, with a warning, when the repository lacks it. */

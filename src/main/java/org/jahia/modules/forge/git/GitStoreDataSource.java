@@ -363,6 +363,9 @@ public class GitStoreDataSource implements ExternalDataSource, ExternalDataSourc
         // module only, and the catalogue JSON leaves it out, as it does with a local draft.
         properties.put("published", version.isDisabled() ? FALSE : TRUE);
         putIfPresent(properties, "changeLog", version.getNotesHtml());
+        putIfPresent(properties, "tag", version.getTag());
+        putIfPresent(properties, "tagUrl", version.getTagUrl());
+        putIfPresent(properties, "changelogUrl", version.getChangelogUrl());
         if (!version.getDependencies().isEmpty()) {
             properties.put("references", version.getDependencies().toArray(new String[0]));
         }

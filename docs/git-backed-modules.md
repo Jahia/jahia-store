@@ -79,6 +79,7 @@ the images and other files that the release notes show.
 ---
 artifact: https://github.com/example/my-module/releases/download/v1.2.0/my-module-1.2.0.jar
 date: 2026-03-04
+tag: v1.2.0
 disabled: false
 requiredVersion: 8.2.1.0
 dependencies:
@@ -94,13 +95,17 @@ dependencies:
 |---|---|---|
 | `artifact` | yes | The URL of the artefact of the version: absolute, `http` or `https`. The store never guesses it. |
 | `date` | no | The release date, `YYYY-MM-DD`. The date of the tip of the store branch otherwise. |
+| `tag` | no | The git tag of the version. The store links it to its page on the git host. |
+| `tagUrl` | no | The page of the tag. On GitHub the store derives it from `tag`, as `<repository>/releases/tag/<tag>`; another host names it here. |
+| `changelog` | no | The page of the changelog of the version. On GitHub the store derives it from the tags of the version and of the one before it in the list, as `<repository>/compare/<previous>...<tag>`; another host, or another page, names it here. |
 | `disabled` | no | `true` disables the version: the store serves it unpublished, so the public, the catalogue JSON and the download link ignore it, and the editors of the module see it marked as disabled. `false` by default. |
 | `requiredVersion` | no | The lowest Jahia version this version runs on. The value of `STORE.md` otherwise. |
 | `dependencies` | no | The Jahia modules this version depends on. The value of `STORE.md` otherwise. |
 
 The Markdown body of `VERSION.md` is the release notes of the version. When the body is empty and
 the folder holds a `CHANGELOG.md`, that file is the release notes. A relative link or image in
-the notes names a file of the folder, and the store serves that file beside the version.
+the notes names a file of the folder, and the store serves that file beside the version. A bare
+URL in the notes is a link.
 
 A version whose folder holds no `VERSION.md`, or whose `artifact` is absent or not an absolute
 `http` or `https` URL, is refused with the version number and the cause.
@@ -141,6 +146,7 @@ The data source serves one module per registration. The root of the provider is 
 | `references` | `dependencies` of `VERSION.md`, or of `STORE.md`. |
 | `uploadDate` | `date` of `VERSION.md`, or the date of the tip of the store branch. |
 | `published` | `false` when `VERSION.md` says `disabled: true`, `true` otherwise. |
+| `tag`, `tagUrl`, `changelogUrl` | `tag` of `VERSION.md`, and the pages of the tag and of the changelog, named or derived. The storefront links them from the version. |
 
 The i18n properties (`description`, `license`) hold the same value in every language.
 
