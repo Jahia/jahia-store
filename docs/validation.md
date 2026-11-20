@@ -116,7 +116,8 @@ carries.
 
 The card of a version shows the validation to everyone: the status of the version, then one line
 per check with its label, its status and its comments. The owner of the module and an
-administrator get the "Validate" button on it.
+administrator get the "Validate" button on it, which reads "Waiting for review", and runs
+nothing, while a check waits for a human.
 
 The validation dashboard is the page `validations` of the site, which the seed of the template
 set creates, shown to administrators in their account menu. It lists the versions waiting for a

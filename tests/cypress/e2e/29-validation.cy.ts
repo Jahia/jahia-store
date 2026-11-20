@@ -89,6 +89,7 @@ describe('A version is validated before it reaches the public', () => {
             .expectCheck('quality', 'approved', 'Quality gate passed')
             .expectCheck('code-review', 'review')
             .expectCheck('security', 'review')
+            .expectValidateWaiting()
             .expectPublishBlocked();
     });
 

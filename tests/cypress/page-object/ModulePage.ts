@@ -241,6 +241,15 @@ export class VersionEntry {
         return this;
     }
 
+    /** A check waits for a human: the Validate button gives way to "Waiting for review", and nothing runs. */
+    expectValidateWaiting(): VersionEntry {
+        this.entry()
+            .find(`[data-request-validation="${this.number}"][data-request-validation-waiting]`)
+            .should('be.disabled')
+            .and('contain.text', 'Waiting for review');
+        return this;
+    }
+
     /** Press "Validate": the store runs the checks again and the page reloads. */
     validate(): VersionEntry {
         // Stamp the window, click, and wait until the stamp is gone: a reload replaces the window,
