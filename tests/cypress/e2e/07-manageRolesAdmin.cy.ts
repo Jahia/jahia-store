@@ -44,10 +44,15 @@ describe('Manage roles admin (React + GraphQL)', () => {
     it('returns the curated role list with no direct grants on a fresh site', () => {
         cy.apollo({query: getManageRolesSettings, variables: {siteKey}})
             .its('data.forge.manageRolesSettings')
-            .should((s: { roles: Array<{ role: string; members: unknown[] }> }) => {
+            .should((s: { roles: Array<{ role: string; members: Array<{ name: string }> }> }) => {
                 const roleNames = s.roles.map(r => r.role);
                 expect(roleNames).to.deep.equal(['store-administrator', 'store-developer', 'reader']);
-                s.roles.forEach(r => expect(r.members).to.have.length(0));
+                const members = (role: string) => s.roles.find(r => r.role === role)!.members.map(m => m.name);
+                expect(members('store-administrator')).to.deep.equal([]);
+                expect(members('store-developer')).to.deep.equal([]);
+                // Jahia itself grants reader to guest on every new site (GRANT u:guest reader, 8.2.3.x):
+                // that is the only direct grant a fresh site may carry.
+                expect(members('reader').filter(name => name !== 'guest')).to.deep.equal([]);
             });
     });
 
