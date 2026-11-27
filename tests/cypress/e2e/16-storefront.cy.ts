@@ -162,7 +162,11 @@ describe('Storefront read views (JS module)', () => {
         // The left-rail Status facet is sorted alphabetically to ease scanning.
         cy.get('[data-forge-filter] input[name="status"]', {timeout: 20000})
             .then($els => $els.toArray().map(el => el.value))
-            .should('deep.equal', ['community', 'labs', 'legacy', 'supported']);
+            .should('deep.equal', ['community', 'community-reviewed', 'labs', 'legacy', 'supported']);
+        // A facet shows the label of its status, not the stored key.
+        cy.get('[data-forge-filter] input[name="status"][value="community-reviewed"]')
+            .parent()
+            .should('contain.text', 'Community (reviewed)');
     });
 
     it('shows a loading indicator while applying a filter', () => {
@@ -332,7 +336,7 @@ describe('Storefront read views (JS module)', () => {
         // Module metadata lives in the always-visible Information rail (no longer behind a tab).
         cy.get('[data-detail-info]').within(() => {
             cy.contains('dt', 'Module ID').next('dd').should('contain.text', 'analytics');
-            cy.contains('dt', /status/i).next('dd').should('contain.text', 'supported');
+            cy.contains('dt', /status/i).next('dd').should('contain.text', 'Supported');
             // "Released" is the newest PUBLISHED version's upload date — NOT the module node's
             // jcr:lastModified, which the seeding writes above moved to "now".
             cy.contains('dt', /released/i).next('dd').should('have.text', releasedDay);

@@ -212,17 +212,17 @@ describe('Authoring views (JS module)', () => {
         cy.contains('button', /edit module/i).click();
         // Status (choicelist) + tags (j:tagList) are on the General tab. They use
         // the same non-i18n setValue / multi-value setValues paths as category.
-        cy.get('#edit-status', {timeout: 10000}).select('legacy');
+        cy.get('#edit-status', {timeout: 10000}).select('community-reviewed');
         cy.get('#edit-tags').type('analytics{enter}charts{enter}');
         // Wait for the save-triggered reload before asserting. Scope the status check to the
-        // detail Information rail's Status field: a bare cy.contains(/legacy/) would also match
-        // the editor's own status <select> "legacy" <option>, which would make the assertion
-        // pass for the wrong reason (or fail on visibility).
+        // detail Information rail's Status field: a bare cy.contains(/reviewed/) would also match
+        // the editor's own status <select> "Community (reviewed)" <option>, which would make the
+        // assertion pass for the wrong reason (or fail on visibility). The rail shows the label.
         saveAndWaitReload();
         cy.get('[data-detail-info]', {timeout: 20000})
             .contains('dt', /status/i)
             .next('dd')
-            .should('contain.text', 'legacy');
+            .should('contain.text', 'Community (reviewed)');
         cy.get('[data-tag-list]').should('contain.text', 'analytics').and('contain.text', 'charts');
     });
 

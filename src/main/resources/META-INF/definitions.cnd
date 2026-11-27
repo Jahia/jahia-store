@@ -27,7 +27,7 @@
 
 [jmix:forgeElement] mixin
  - forcedRating (string) hidden
- - status (string, choicelist[resourceBundle]) = 'community' indexed=no autocreated < 'community', 'labs', 'prereleased', 'supported', 'legacy'
+ - status (string, choicelist[resourceBundle]) = 'community' indexed=no autocreated < 'community', 'community-reviewed', 'labs', 'prereleased', 'supported', 'legacy'
 
 
 [jnt:forgeCategoryFilter] > jnt:content, jmix:forge, jmix:bindedComponent
