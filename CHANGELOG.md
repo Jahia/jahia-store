@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.3.0 (unreleased)
+
+### Added
+
+- **Community (reviewed) status.** A module or package can take the status `community-reviewed`, shown as
+  *Community (reviewed)*, next to Community, Labs, Supported and Legacy. jContent now shows a label for each
+  status value instead of its key.
+
 ## 5.2.0 (2026-11-18)
 
 > **For administrators: the `store-administrator` role now has Jahia's `publish` permission.** Store
